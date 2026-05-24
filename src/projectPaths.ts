@@ -1,0 +1,144 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import { getDiskArchivePath, isPathInsideArchive } from './archives';
+
+export function normalizePath(filePath: string): string {
+    return path.normalize(filePath);
+}
+
+export function pathsEqual(a: string, b: string): boolean {
+    const left = normalizePath(a);
+    const right = normalizePath(b);
+    if (process.platform === 'win32') {
+        return left.toLowerCase() === right.toLowerCase();
+    }
+    return left === right;
+}
+
+export function isWithinRoot(root: string, target: string): boolean {
+    const rootNorm = normalizePath(root);
+    const targetNorm = normalizePath(target);
+    if (pathsEqual(rootNorm, targetNorm)) {
+        return true;
+    }
+    const rel = path.relative(rootNorm, targetNorm);
+    return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
+const ZSDIC = path.join('Pack', 'ZsDic.pack.zs');
+
+const ROMFS_DIR_NAMES = ['RomFS', 'romfs', 'Romfs', 'ROMFS'];
+
+function isDirectory(dirPath: string): boolean {
+    try {
+        return fs.statSync(dirPath).isDirectory();
+    } catch {
+        return false;
+    }
+}
+
+function listSubdirectories(dirPath: string): string[] {
+    try {
+        return fs
+            .readdirSync(dirPath, { withFileTypes: true })
+            .filter((entry) => entry.isDirectory())
+            .map((entry) => path.join(dirPath, entry.name));
+    } catch {
+        return [];
+    }
+}
+
+function findNamedRomfsFolder(base: string): string | undefined {
+    for (const name of ROMFS_DIR_NAMES) {
+        const candidate = path.join(base, name);
+        if (isDirectory(candidate)) {
+            return candidate;
+        }
+    }
+    return undefined;
+}
+
+/** Locate the RomFS folder under a project (ZsDic dump, RomFS/romfs folder, or nested). */
+export function findRomfsFolderUnder(projectRoot: string): string | undefined {
+    const project = normalizePath(projectRoot);
+    if (fs.existsSync(path.join(project, ZSDIC))) {
+        return project;
+    }
+
+    const direct = findNamedRomfsFolder(project);
+    if (direct) {
+        return direct;
+    }
+
+    for (const child of listSubdirectories(project)) {
+        if (fs.existsSync(path.join(child, ZSDIC))) {
+            return child;
+        }
+        const nested = findNamedRomfsFolder(child);
+        if (nested) {
+            return nested;
+        }
+    }
+
+    return undefined;
+}
+
+/** Where dump-relative paths should land inside a mod project. */
+export function resolveProjectRomfsMount(projectRoot: string, gameRomfsRoot: string): string {
+    const project = normalizePath(projectRoot);
+    const gameRomfs = normalizePath(gameRomfsRoot);
+
+    if (pathsEqual(project, gameRomfs)) {
+        return project;
+    }
+
+    if (isWithinRoot(project, gameRomfs)) {
+        return gameRomfs;
+    }
+
+    const found = findRomfsFolderUnder(project);
+    if (found) {
+        return found;
+    }
+
+    return path.join(project, 'RomFS');
+}
+
+/** Map a dump file path to the destination path inside a project root. */
+export function resolveProjectDestination(
+    copySource: string,
+    projectRoot: string,
+    romfsRoot: string,
+): string {
+    const project = normalizePath(projectRoot);
+    const source = normalizePath(copySource);
+    const gameRomfs = normalizePath(romfsRoot);
+
+    if (!isWithinRoot(gameRomfs, source) && !isWithinRoot(project, source)) {
+        throw new Error('Selected file is not inside the configured game dump or project.');
+    }
+
+    if (isWithinRoot(project, source)) {
+        return path.join(project, path.relative(project, source));
+    }
+
+    const relFromGameRomfs = path.relative(gameRomfs, source);
+    const projectRomfs = resolveProjectRomfsMount(project, gameRomfs);
+    return path.join(projectRomfs, relFromGameRomfs);
+}
+
+export function resolveAddToCopyPaths(
+    sourceFsPath: string,
+    projectRoot: string,
+    romfsRoot: string,
+): { source: string; destination: string } {
+    const source = normalizePath(sourceFsPath);
+    const copySource = isPathInsideArchive(source)
+        ? normalizePath(getDiskArchivePath(source))
+        : source;
+
+    return {
+        source: copySource,
+        destination: resolveProjectDestination(copySource, projectRoot, romfsRoot),
+    };
+}

@@ -1,4 +1,5 @@
 {
+  "showLanguageModeIcons": true,
   "iconDefinitions": {
     "_totk_pack": {
       "iconPath": "./pack.svg"
@@ -11,28 +12,41 @@
     },
     "_totk_msbt": {
       "iconPath": "./msbt.svg"
+    },
+    "_totk_tkproj": {
+      "iconPath": "./tkproj.svg"
     }
   },
   "folderNames": {
     "*.pack": "_totk_pack",
     "*.pack.zs": "_totk_pack",
     "*.sarc": "_totk_pack",
-    "*.sarc.zs": "_totk_pack"
+    "*.sarc.zs": "_totk_pack",
+    "*.genvb": "_totk_pack",
+    "*.genvb.zs": "_totk_pack"
   },
   "folderNamesExpanded": {
     "*.pack": "_totk_pack",
     "*.pack.zs": "_totk_pack",
     "*.sarc": "_totk_pack",
-    "*.sarc.zs": "_totk_pack"
+    "*.sarc.zs": "_totk_pack",
+    "*.genvb": "_totk_pack",
+    "*.genvb.zs": "_totk_pack"
   },
   "fileExtensions": {
     "pack": "_totk_pack",
     "pack.zs": "_totk_pack",
     "sarc": "_totk_pack",
     "sarc.zs": "_totk_pack",
+    "genvb": "_totk_pack",
+    "genvb.zs": "_totk_pack",
     "byml": "_totk_byml",
     "bgyml": "_totk_bgyml",
-    "msbt": "_totk_msbt"
+    "msbt": "_totk_msbt",
+    "tkproj": "_totk_tkproj"
+  },
+  "fileNames": {
+    ".tkproj": "_totk_tkproj"
   },
   "languageIds": {
     "byml": "_totk_byml",

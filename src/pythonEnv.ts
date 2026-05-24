@@ -118,7 +118,7 @@ function verifyVenvPython(venvPython: string): boolean {
             venvPython,
             [
                 '-c',
-                'import oead, zstandard; from pymsbt.msbt import MSBTFile',
+                'import oead, zstandard, mmh3; from pymsbt.msbt import MSBTFile',
             ],
             { stdio: 'pipe', timeout: 60_000 },
         );

@@ -8,61 +8,41 @@ import {
     promptPythonSetup,
 } from './pythonEnv';
 import { registerSyntaxColorSync } from './syntaxColors';
+import { isEditableFile, toTotkDiskUri } from './editableFiles';
+import { TotkDiskFileSystemProvider } from './totkDiskFs';
+import {
+    archiveCacheKey,
+    getDiskArchivePath,
+    getLocatorInsideDiskArchive,
+    isArchiveBrowsePath,
+    isArchiveFile,
+    isPathInsideArchive,
+} from './archives';
+import { registerDocumentLanguageModes } from './languageModes';
+import { getAampExtensions, initAampExtensions } from './aampExtensions';
+import { createDiskDirectory, deleteDiskPath, renameDiskPath } from './diskFsOps';
+import {
+    focusArchiveSidebar,
+    migrateSarcWorkspaceFolders,
+    registerArchiveTree,
+} from './archiveTree';
+import { registerGameDumpTree } from './dumpTree';
+import { createReadonlyArchiveFs } from './readonlyArchiveFs';
+import { resolveRomfsPath } from './romfs';
+import {
+    migrateOffStandaloneIconTheme,
+    registerIconThemeCommands,
+} from './iconTheme';
 
-const ARCHIVE_FILE_PATTERN = /\.(pack|sarc)(\.zs)?$/i;
-
-function isArchiveFile(filePath: string): boolean {
-    return ARCHIVE_FILE_PATTERN.test(filePath);
-}
-
-function pathContainsArchive(filePath: string): boolean {
-    return /\.(pack|sarc)(\.zs)?/i.test(filePath);
-}
-
-function toSarcUri(fileUri: vscode.Uri): vscode.Uri {
-    return fileUri.with({ scheme: 'sarc' });
-}
-
-let isConvertingWorkspace = false;
-
-function convertFileWorkspaceFolders(): void {
-    if (isConvertingWorkspace) {
-        return;
-    }
-
-    const folders = vscode.workspace.workspaceFolders;
-    if (!folders) {
-        return;
-    }
-
-    const toConvert: { index: number; uri: vscode.Uri; name: string }[] = [];
-    for (let i = 0; i < folders.length; i++) {
-        const folder = folders[i]!;
-        if (folder.uri.scheme === 'file') {
-            toConvert.push({
-                index: i,
-                uri: toSarcUri(folder.uri),
-                name: folder.name,
-            });
-        }
-    }
-
-    if (toConvert.length === 0) {
-        return;
-    }
-
-    isConvertingWorkspace = true;
-    try {
-        for (let i = toConvert.length - 1; i >= 0; i--) {
-            const entry = toConvert[i]!;
-            vscode.workspace.updateWorkspaceFolders(entry.index, 1, {
-                uri: entry.uri,
-                name: entry.name,
-            });
-        }
-    } finally {
-        isConvertingWorkspace = false;
-    }
+function getBridgeEnv(): NodeJS.ProcessEnv {
+    const config = vscode.workspace.getConfiguration('totk-editor');
+    const romfsPath = resolveRomfsPath();
+    const extraAamp = config.get<string[]>('extraAampExtensions', []);
+    return {
+        ...process.env,
+        TOTK_EDITOR_ROMFS: romfsPath,
+        TOTK_EXTRA_AAMP_EXTS: extraAamp.map((ext) => ext.replace(/^\./, '')).join(','),
+    };
 }
 
 class SarcProvider implements vscode.FileSystemProvider {
@@ -90,22 +70,81 @@ class SarcProvider implements vscode.FileSystemProvider {
         return new vscode.Disposable(() => { });
     }
 
-    private getPhysicalPath(fsPath: string): string {
-        const match = fsPath.match(/(.*\.(pack|sarc)(\.zs)?)/i);
-        return match ? match[1] : fsPath;
+    private getDiskArchive(fsPath: string): string {
+        return getDiskArchivePath(fsPath);
     }
 
-    private getInternalPath(fsPath: string, physicalPath: string): string {
-        let internal = fsPath.substring(physicalPath.length);
-        internal = internal.replace(/\\/g, '/');
-        if (internal.startsWith('/')) {
-            internal = internal.substring(1);
+    private getLocator(fsPath: string, diskArchive: string): string {
+        return getLocatorInsideDiskArchive(fsPath, diskArchive);
+    }
+
+    private listingPrefix(locator: string): string {
+        return locator ? `${locator.replace(/\\/g, '/')}/` : '';
+    }
+
+    private loadArchiveListing(diskArchive: string, locator: string): string[] {
+        const cacheKey = archiveCacheKey(diskArchive, locator);
+        let files = this.fileCache.get(cacheKey);
+        if (!files) {
+            console.log(`Loading archive: ${diskArchive} @ ${locator || '(root)'}`);
+            files = runBridgeJson<string[]>(
+                this.requirePython(),
+                this.bridgePath,
+                ['list', diskArchive, locator],
+                undefined,
+                getBridgeEnv(),
+            );
+            this.fileCache.set(cacheKey, files!);
+            console.log(`Mapped ${files!.length} paths inside archive view.`);
         }
-        return internal;
+        return files;
     }
 
-    private isOnDisk(fsPath: string): boolean {
-        return !pathContainsArchive(fsPath);
+    private entryTypeInListing(
+        files: string[],
+        parentPrefix: string,
+        name: string,
+    ): vscode.FileType {
+        const fullPath = parentPrefix ? `${parentPrefix}${name}` : name;
+        const hasChildren = files.some(
+            (entry) => entry.length > fullPath.length + 1 && entry.startsWith(`${fullPath}/`),
+        );
+        if (hasChildren || isArchiveFile(name)) {
+            return vscode.FileType.Directory;
+        }
+        if (files.includes(fullPath)) {
+            return vscode.FileType.File;
+        }
+        return vscode.FileType.Directory;
+    }
+
+    private isDirectoryLocator(diskArchive: string, locator: string): boolean {
+        if (!locator) {
+            return true;
+        }
+
+        const normalized = locator.replace(/\\/g, '/');
+        const name = normalized.split('/').pop() ?? '';
+        if (isArchiveFile(name)) {
+            return true;
+        }
+
+        const parentLocator = normalized.includes('/')
+            ? normalized.replace(/\/[^/]+$/, '')
+            : '';
+        const files = this.loadArchiveListing(diskArchive, parentLocator);
+        return (
+            this.entryTypeInListing(files, this.listingPrefix(parentLocator), name) ===
+            vscode.FileType.Directory
+        );
+    }
+
+    private isMutatableDiskPath(fsPath: string): boolean {
+        return !isPathInsideArchive(fsPath);
+    }
+
+    private usesArchiveListing(fsPath: string): boolean {
+        return isArchiveBrowsePath(fsPath);
     }
 
     private listDiskDirectory(dirPath: string): [string, vscode.FileType][] {
@@ -160,75 +199,45 @@ class SarcProvider implements vscode.FileSystemProvider {
     stat(uri: vscode.Uri): vscode.FileStat {
         const fsPath = uri.fsPath;
 
-        if (this.isOnDisk(fsPath)) {
+        if (!this.usesArchiveListing(fsPath)) {
             return this.statDiskPath(fsPath);
         }
 
-        const physicalPath = this.getPhysicalPath(fsPath);
-        const internalPath = this.getInternalPath(fsPath, physicalPath);
+        const diskArchive = this.getDiskArchive(fsPath);
+        const locator = this.getLocator(fsPath, diskArchive);
 
-        if (!internalPath) {
+        if (this.isDirectoryLocator(diskArchive, locator)) {
             return { type: vscode.FileType.Directory, ctime: 0, mtime: 0, size: 0 };
         }
 
-        const files = this.fileCache.get(physicalPath);
-        if (files) {
-            if (files.includes(internalPath)) {
-                return { type: vscode.FileType.File, ctime: 0, mtime: 0, size: 100 };
-            }
-            const isDir = files.some((f) => f.startsWith(internalPath + '/'));
-            if (isDir) {
-                return { type: vscode.FileType.Directory, ctime: 0, mtime: 0, size: 0 };
-            }
-        }
-
-        return { type: vscode.FileType.File, ctime: 0, mtime: 0, size: 0 };
+        return { type: vscode.FileType.File, ctime: 0, mtime: 0, size: 100 };
     }
 
     readDirectory(uri: vscode.Uri): [string, vscode.FileType][] {
         const fsPath = uri.fsPath;
 
-        if (this.isOnDisk(fsPath)) {
+        if (!this.usesArchiveListing(fsPath)) {
             return this.listDiskDirectory(fsPath);
         }
 
-        const physicalPath = this.getPhysicalPath(fsPath);
-        const internalPath = this.getInternalPath(fsPath, physicalPath);
-
-        if (
-            fsPath !== physicalPath &&
-            fsPath !== physicalPath + '\\' &&
-            fsPath !== physicalPath + '/' &&
-            !this.fileCache.has(physicalPath)
-        ) {
-            return [];
-        }
-
-        let files = this.fileCache.get(physicalPath);
-
-        if (!files) {
-            console.log(`Loading SARC into memory: ${physicalPath}`);
-            files = runBridgeJson<string[]>(this.requirePython(), this.bridgePath, [
-                'list',
-                physicalPath,
-            ]);
-            this.fileCache.set(physicalPath, files!);
-            console.log(`Successfully mapped ${files!.length} internal files.`);
-        }
+        const diskArchive = this.getDiskArchive(fsPath);
+        const locator = this.getLocator(fsPath, diskArchive);
+        const files = this.loadArchiveListing(diskArchive, locator);
 
         const result = new Map<string, vscode.FileType>();
-        const prefix = internalPath ? internalPath + '/' : '';
+        const prefix = this.listingPrefix(locator);
 
-        for (const f of files!) {
-            if (f.startsWith(prefix)) {
-                const remainder = f.substring(prefix.length);
-                const parts = remainder.split('/');
-                if (parts.length === 1) {
-                    result.set(parts[0], vscode.FileType.File);
-                } else {
-                    result.set(parts[0], vscode.FileType.Directory);
-                }
+        for (const entry of files) {
+            if (!entry.startsWith(prefix)) {
+                continue;
             }
+            const remainder = entry.substring(prefix.length);
+            const slashIndex = remainder.indexOf('/');
+            const name = slashIndex === -1 ? remainder : remainder.substring(0, slashIndex);
+            if (!name) {
+                continue;
+            }
+            result.set(name, this.entryTypeInListing(files, prefix, name));
         }
 
         return Array.from(result.entries());
@@ -237,20 +246,37 @@ class SarcProvider implements vscode.FileSystemProvider {
     readFile(uri: vscode.Uri): Uint8Array {
         const fsPath = uri.fsPath;
 
-        if (this.isOnDisk(fsPath)) {
+        if (!this.usesArchiveListing(fsPath)) {
+            if (isEditableFile(fsPath)) {
+                try {
+                    const result = runBridgeJson<{ content: string }>(
+                        this.requirePython(),
+                        this.bridgePath,
+                        ['read-disk', fsPath],
+                        undefined,
+                        getBridgeEnv(),
+                    );
+                    return new TextEncoder().encode(result.content);
+                } catch (error) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    return new TextEncoder().encode(`Error reading file: ${message}`);
+                }
+            }
             return fs.readFileSync(fsPath);
         }
 
-        const physicalPath = this.getPhysicalPath(fsPath);
-        const internalPath = this.getInternalPath(fsPath, physicalPath);
+        const diskArchive = this.getDiskArchive(fsPath);
+        const filePath = this.getLocator(fsPath, diskArchive);
 
         try {
-            console.log(`Reading: ${internalPath}`);
-            const result = runBridgeJson<{ content: string }>(this.requirePython(), this.bridgePath, [
-                'read',
-                physicalPath,
-                internalPath,
-            ]);
+            console.log(`Reading: ${diskArchive} / ${filePath}`);
+            const result = runBridgeJson<{ content: string }>(
+                this.requirePython(),
+                this.bridgePath,
+                ['read', diskArchive, filePath],
+                undefined,
+                getBridgeEnv(),
+            );
 
             return new TextEncoder().encode(result.content);
         } catch (error) {
@@ -259,31 +285,70 @@ class SarcProvider implements vscode.FileSystemProvider {
         }
     }
 
-    createDirectory(uri: vscode.Uri): void { }
+    private notifyChanged(uri: vscode.Uri, type: vscode.FileChangeType): void {
+        this._onDidChangeFile.fire([{ type, uri }]);
+    }
+
+    private rejectArchiveMutation(operation: string): never {
+        throw vscode.FileSystemError.NoPermissions(
+            `Cannot ${operation} paths inside .pack / .sarc / .genvb archives. Extract the file or use a dedicated modding tool.`,
+        );
+    }
+
+    createDirectory(uri: vscode.Uri): void {
+        const fsPath = uri.fsPath;
+        if (!this.isMutatableDiskPath(fsPath)) {
+            this.rejectArchiveMutation('create folders in');
+        }
+        createDiskDirectory(fsPath);
+        this.notifyChanged(uri, vscode.FileChangeType.Created);
+    }
 
     writeFile(uri: vscode.Uri, content: Uint8Array, options: { create: boolean; overwrite: boolean }): void {
         const fsPath = uri.fsPath;
 
-        if (this.isOnDisk(fsPath)) {
+        if (this.isMutatableDiskPath(fsPath)) {
+            if (isEditableFile(fsPath)) {
+                try {
+                    const text = new TextDecoder().decode(content);
+                    runBridgeJson<{ success: boolean }>(
+                        this.requirePython(),
+                        this.bridgePath,
+                        ['write-disk', fsPath],
+                        text,
+                        getBridgeEnv(),
+                    );
+                } catch (error) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    vscode.window.showErrorMessage(`Failed to save: ${message}`);
+                    throw vscode.FileSystemError.Unavailable(message);
+                }
+                return;
+            }
             fs.writeFileSync(fsPath, content);
             return;
         }
 
-        const physicalPath = this.getPhysicalPath(fsPath);
-        const internalPath = this.getInternalPath(fsPath, physicalPath);
+        const diskArchive = this.getDiskArchive(fsPath);
+        const filePath = this.getLocator(fsPath, diskArchive);
 
         try {
-            console.log(`Writing back to: ${internalPath}`);
+            console.log(`Writing back to: ${diskArchive} / ${filePath}`);
             const yamlContent = new TextDecoder().decode(content);
 
             runBridgeJson<{ success: boolean }>(
                 this.requirePython(),
                 this.bridgePath,
-                ['write', physicalPath, internalPath],
+                ['write', diskArchive, filePath],
                 yamlContent,
+                getBridgeEnv(),
             );
 
-            this.fileCache.delete(physicalPath);
+            for (const key of [...this.fileCache.keys()]) {
+                if (key.startsWith(`${diskArchive}::`)) {
+                    this.fileCache.delete(key);
+                }
+            }
             console.log('Successfully saved and repacked SARC!');
         } catch (error) {
             console.error('Python Write Error:', error);
@@ -292,14 +357,33 @@ class SarcProvider implements vscode.FileSystemProvider {
         }
     }
 
-    delete(uri: vscode.Uri, options: { recursive: boolean }): void { }
-    rename(oldUri: vscode.Uri, newUri: vscode.Uri, options: { overwrite: boolean }): void { }
+    delete(uri: vscode.Uri, options: { recursive: boolean }): void {
+        const fsPath = uri.fsPath;
+        if (!this.isMutatableDiskPath(fsPath)) {
+            this.rejectArchiveMutation('delete files from');
+        }
+        deleteDiskPath(fsPath, options.recursive);
+        this.notifyChanged(uri, vscode.FileChangeType.Deleted);
+    }
+
+    rename(oldUri: vscode.Uri, newUri: vscode.Uri, options: { overwrite: boolean }): void {
+        const oldPath = oldUri.fsPath;
+        const newPath = newUri.fsPath;
+        if (!this.isMutatableDiskPath(oldPath) || !this.isMutatableDiskPath(newPath)) {
+            this.rejectArchiveMutation('rename files in');
+        }
+        renameDiskPath(oldPath, newPath, options.overwrite);
+        this.notifyChanged(oldUri, vscode.FileChangeType.Deleted);
+        this.notifyChanged(newUri, vscode.FileChangeType.Created);
+    }
 }
 
 export async function activate(context: vscode.ExtensionContext) {
+    initAampExtensions(context.extensionPath);
     console.log('TOTK Editor is now active!');
 
     registerSyntaxColorSync(context);
+    registerDocumentLanguageModes(context);
 
     const bridgePath = path.join(context.extensionPath, 'totk_bridge.py');
     const getPython = () => getCachedPythonExecutable() ?? '';
@@ -309,6 +393,65 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.workspace.registerFileSystemProvider('sarc', sarcProvider, {
             isCaseSensitive: true,
             isReadonly: false,
+        }),
+    );
+
+    context.subscriptions.push(
+        vscode.workspace.registerFileSystemProvider(
+            'totk-dump',
+            createReadonlyArchiveFs(sarcProvider),
+            {
+                isCaseSensitive: true,
+                isReadonly: true,
+            },
+        ),
+    );
+
+    const totkDiskProvider = new TotkDiskFileSystemProvider(bridgePath, getPython, getBridgeEnv);
+    context.subscriptions.push(
+        vscode.workspace.registerFileSystemProvider('totk-disk', totkDiskProvider, {
+            isCaseSensitive: true,
+            isReadonly: false,
+        }),
+    );
+
+    const redirectedDocuments = new Set<string>();
+    context.subscriptions.push(
+        vscode.workspace.onDidOpenTextDocument(async (document) => {
+            if (document.uri.scheme !== 'file') {
+                return;
+            }
+            if (!isEditableFile(document.uri.fsPath)) {
+                return;
+            }
+            const key = document.uri.toString();
+            if (redirectedDocuments.has(key)) {
+                return;
+            }
+            redirectedDocuments.add(key);
+
+            const totkUri = toTotkDiskUri(document.uri);
+            const existingColumn = vscode.window.visibleTextEditors.find(
+                (editor) => editor.document === document,
+            )?.viewColumn;
+
+            await vscode.window.showTextDocument(totkUri, {
+                viewColumn: existingColumn,
+                preview: false,
+            });
+
+            for (const group of vscode.window.tabGroups.all) {
+                for (const tab of group.tabs) {
+                    const input = tab.input;
+                    if (
+                        input instanceof vscode.TabInputText &&
+                        input.uri.toString() === key
+                    ) {
+                        await vscode.window.tabGroups.close(tab);
+                        break;
+                    }
+                }
+            }
         }),
     );
 
@@ -327,38 +470,48 @@ export async function activate(context: vscode.ExtensionContext) {
         await promptPythonSetup(context);
     }
 
-    convertFileWorkspaceFolders();
-    context.subscriptions.push(
-        vscode.workspace.onDidChangeWorkspaceFolders((event) => {
-            if (isConvertingWorkspace) {
-                return;
-            }
-            for (const folder of event.added) {
-                if (folder.uri.scheme === 'file') {
-                    convertFileWorkspaceFolders();
-                    break;
-                }
-            }
-        }),
-    );
+    await migrateOffStandaloneIconTheme(context);
+    registerIconThemeCommands(context);
+
+    const archiveTree = registerArchiveTree(context);
+    registerGameDumpTree(context, archiveTree);
+    await migrateSarcWorkspaceFolders(archiveTree);
+
+    const openEditableFile = vscode.commands.registerCommand('totk-editor.openEditableFile', async () => {
+        const aampFilterExtensions = [...getAampExtensions()];
+        const fileUri = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            filters: {
+                'TOTK Files': [
+                    'byml',
+                    'bgyml',
+                    'msbt',
+                    'asb',
+                    'baev',
+                    'zs',
+                    ...aampFilterExtensions,
+                ],
+            },
+        });
+
+        if (fileUri?.[0]) {
+            const totkUri = toTotkDiskUri(fileUri[0]);
+            await vscode.window.showTextDocument(totkUri);
+        }
+    });
+    context.subscriptions.push(openEditableFile);
 
     const openArchive = vscode.commands.registerCommand('totk-editor.openPack', async () => {
         const fileUri = await vscode.window.showOpenDialog({
             canSelectMany: false,
             filters: {
-                'SARC Archives': ['pack', 'sarc', 'zs'],
+                'TOTK Archives': ['pack', 'sarc', 'genvb', 'zs'],
             },
         });
 
-        if (fileUri && fileUri[0]) {
-            const archivePath = fileUri[0].fsPath;
-            const sarcUri = toSarcUri(vscode.Uri.file(archivePath));
-
-            vscode.workspace.updateWorkspaceFolders(
-                vscode.workspace.workspaceFolders ? vscode.workspace.workspaceFolders.length : 0,
-                null,
-                { uri: sarcUri, name: path.basename(archivePath) },
-            );
+        if (fileUri?.[0]) {
+            archiveTree.addRoot(fileUri[0]);
+            void focusArchiveSidebar();
         }
     });
 

@@ -2,7 +2,7 @@
   "name": "totk-vscode",
   "publisher": "totk-editor",
   "displayName": "totk-vscode",
-  "description": "Edits TOTK SARC archives, BYML, and MSBT files",
+  "description": "Edits TOTK archives, BYML, AAMP (many extensions), MSBT, ASB, and BAEV files",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.120.0"
@@ -14,20 +14,29 @@
     "onStartupFinished",
     "workspaceContains:**/*.pack",
     "workspaceContains:**/*.sarc",
+    "workspaceContains:**/*.genvb",
     "onFileSystem:sarc",
     "onCommand:totk-editor.openPack",
     "onCommand:totk-editor.setupPython",
-    "onCommand:totk-editor.resetColors"
+    "onCommand:totk-editor.resetColors",
+    "onCommand:totk-editor.applyColors",
+    "onFileSystem:totk-disk",
+    "onCommand:totk-editor.openEditableFile",
+    "onCommand:totk-editor.refreshArchives",
+    "onCommand:totk-editor.addWorkspaceToArchives",
+    "onView:totk-editor.archives",
+    "onFileSystem:totk-dump",
+    "onCommand:totk-editor.refreshGameDump",
+    "onCommand:totk-editor.addDumpToProject",
+    "onView:totk-editor.gameDump"
   ],
   "main": "./dist/extension.js",
   "contributes": {
     "iconThemes": [
       {
         "id": "totk-icons",
-        "path": "./icons/totk-icon-theme.json",
-        "extends": {
-          "all": true
-        }
+        "label": "TOTK File Icons (partial — prefer your usual theme)",
+        "path": "./icons/totk-icon-theme.json"
       }
     ],
     "languages": [
@@ -75,6 +84,37 @@
           "light": "./icons/msbt.svg",
           "dark": "./icons/msbt.svg"
         }
+      },
+      {
+        "id": "totk-archive",
+        "extensions": [
+          ".pack",
+          ".pack.zs",
+          ".sarc",
+          ".sarc.zs",
+          ".genvb",
+          ".genvb.zs"
+        ],
+        "aliases": [
+          "TOTK Archive"
+        ],
+        "icon": {
+          "light": "./icons/pack.svg",
+          "dark": "./icons/pack.svg"
+        }
+      },
+      {
+        "id": "totk-tkproj",
+        "filenames": [
+          ".tkproj"
+        ],
+        "aliases": [
+          "TOTK Project"
+        ],
+        "icon": {
+          "light": "./icons/tkproj.svg",
+          "dark": "./icons/tkproj.svg"
+        }
       }
     ],
     "grammars": [
@@ -97,15 +137,239 @@
     "commands": [
       {
         "command": "totk-editor.openPack",
-        "title": "TOTK: Open SARC Archive"
+        "title": "TOTK: Open Archive (.pack, .sarc, .genvb)",
+        "icon": "$(package)"
+      },
+      {
+        "command": "totk-editor.addWorkspaceToArchives",
+        "title": "TOTK: Browse Workspace in Archives",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "totk-editor.refreshArchives",
+        "title": "TOTK: Refresh Archives",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "totk-editor.removeArchiveRoot",
+        "title": "Remove from Archives"
+      },
+      {
+        "command": "totk-editor.refreshGameDump",
+        "title": "TOTK: Refresh Game Dump",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "totk-editor.openRomfsSettings",
+        "title": "TOTK: Set Game Dump Path"
+      },
+      {
+        "command": "totk-editor.addDumpToProject",
+        "title": "Add to Project…"
+      },
+      {
+        "command": "totk-editor.archiveDelete",
+        "title": "Delete"
+      },
+      {
+        "command": "totk-editor.archiveRename",
+        "title": "Rename"
+      },
+      {
+        "command": "totk-editor.archiveNewFile",
+        "title": "New File"
+      },
+      {
+        "command": "totk-editor.archiveNewFolder",
+        "title": "New Folder"
+      },
+      {
+        "command": "totk-editor.archiveCopy",
+        "title": "Copy"
+      },
+      {
+        "command": "totk-editor.archiveCut",
+        "title": "Cut"
+      },
+      {
+        "command": "totk-editor.archivePaste",
+        "title": "Paste"
+      },
+      {
+        "command": "totk-editor.openEditableFile",
+        "title": "TOTK: Open File (BYML, AAMP, MSBT, ASB, BAEV)"
       },
       {
         "command": "totk-editor.setupPython",
         "title": "TOTK: Set Up Python Environment"
       },
       {
+        "command": "totk-editor.applyColors",
+        "title": "TOTK: Apply Syntax Colors"
+      },
+      {
         "command": "totk-editor.resetColors",
         "title": "TOTK: Reset Syntax Colors to Defaults"
+      },
+      {
+        "command": "totk-editor.clearColorOverrides",
+        "title": "TOTK: Clear Syntax Color Overrides"
+      },
+      {
+        "command": "totk-editor.useTotkIcons",
+        "title": "TOTK: File Icon Theme Help"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "totk-editor.addToProject",
+        "label": "Add to"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "totk-editor",
+          "title": "TOTK Archives",
+          "icon": "icons/archives.svg"
+        },
+        {
+          "id": "totk-editor-dump",
+          "title": "Game Dump",
+          "icon": "icons/dump.svg"
+        }
+      ]
+    },
+    "views": {
+      "totk-editor": [
+        {
+          "id": "totk-editor.archives",
+          "name": "Archives"
+        }
+      ],
+      "totk-editor-dump": [
+        {
+          "id": "totk-editor.gameDump",
+          "name": "RomFS"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "totk-editor.archives",
+        "contents": "Browse `.pack`, `.sarc`, and `.genvb` as expandable trees in the **TOTK Archives** sidebar tab.\n\n[Open Archive](command:totk-editor.openPack)\n\n[Browse Workspace Folder](command:totk-editor.addWorkspaceToArchives)"
+      },
+      {
+        "view": "totk-editor.gameDump",
+        "contents": "Read-only view of your extracted game **RomFS**. Set **totk-editor.romfsPath** to the dump folder (must contain `Pack/ZsDic.pack.zs`).\n\n[Set Game Dump Path](command:totk-editor.openRomfsSettings)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "totk-editor.openPack",
+          "when": "view == totk-editor.archives",
+          "group": "navigation"
+        },
+        {
+          "command": "totk-editor.addWorkspaceToArchives",
+          "when": "view == totk-editor.archives",
+          "group": "navigation"
+        },
+        {
+          "command": "totk-editor.refreshArchives",
+          "when": "view == totk-editor.archives",
+          "group": "navigation"
+        },
+        {
+          "command": "totk-editor.refreshGameDump",
+          "when": "view == totk-editor.gameDump",
+          "group": "navigation"
+        },
+        {
+          "command": "totk-editor.openRomfsSettings",
+          "when": "view == totk-editor.gameDump",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "totk-editor.removeArchiveRoot",
+          "when": "view == totk-editor.archives && viewItem == archiveRoot"
+        },
+        {
+          "command": "totk-editor.archiveNewFile",
+          "when": "view == totk-editor.archives && (viewItem == archiveRoot || viewItem == archiveDir)",
+          "group": "1_create@1"
+        },
+        {
+          "command": "totk-editor.archiveNewFolder",
+          "when": "view == totk-editor.archives && (viewItem == archiveRoot || viewItem == archiveDir)",
+          "group": "1_create@2"
+        },
+        {
+          "command": "totk-editor.archiveRename",
+          "when": "view == totk-editor.archives && (viewItem == archiveFile || viewItem == archivePackage || viewItem == archiveDir)",
+          "group": "7_modification@1"
+        },
+        {
+          "command": "totk-editor.archiveDelete",
+          "when": "view == totk-editor.archives && (viewItem == archiveFile || viewItem == archivePackage || viewItem == archiveDir)",
+          "group": "7_modification@2"
+        },
+        {
+          "command": "totk-editor.archiveCopy",
+          "when": "view == totk-editor.archives && (viewItem == archiveFile || viewItem == archivePackage || viewItem == archiveDir)",
+          "group": "9_cutcopypaste@1"
+        },
+        {
+          "command": "totk-editor.archiveCut",
+          "when": "view == totk-editor.archives && (viewItem == archiveFile || viewItem == archivePackage || viewItem == archiveDir)",
+          "group": "9_cutcopypaste@2"
+        },
+        {
+          "command": "totk-editor.archivePaste",
+          "when": "view == totk-editor.archives && (viewItem == archiveRoot || viewItem == archiveDir)",
+          "group": "9_cutcopypaste@3"
+        },
+        {
+          "submenu": "totk-editor.addToProject",
+          "when": "view == totk-editor.gameDump && (viewItem == dumpFile || viewItem == dumpArchive)",
+          "group": "2_add"
+        }
+      ],
+      "totk-editor.addToProject": [
+        {
+          "command": "totk-editor.addDumpToProject",
+          "when": "view == totk-editor.gameDump"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "totk-editor.archiveDelete",
+        "key": "delete",
+        "when": "totk-editor.archives.focus && !inputFocus"
+      },
+      {
+        "command": "totk-editor.archiveRename",
+        "key": "f2",
+        "when": "totk-editor.archives.focus && !inputFocus"
+      },
+      {
+        "command": "totk-editor.archiveCopy",
+        "key": "ctrl+c",
+        "when": "totk-editor.archives.focus && !inputFocus"
+      },
+      {
+        "command": "totk-editor.archiveCut",
+        "key": "ctrl+x",
+        "when": "totk-editor.archives.focus && !inputFocus"
+      },
+      {
+        "command": "totk-editor.archivePaste",
+        "key": "ctrl+v",
+        "when": "totk-editor.archives.focus && !inputFocus"
       }
     ],
     "configuration": {
@@ -116,14 +380,27 @@
           "default": "",
           "markdownDescription": "Optional path to a Python 3.10+ executable used to create the extension's bundled virtual environment. Leave empty to auto-detect (`py`, `python3`, etc.)."
         },
+        "totk-editor.romfsPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to your extracted game **RomFS** (game dump) folder. Must contain `Pack/ZsDic.pack.zs`. **Required** to open or save any `.zs` file (`.pack.zs`, `.byml.zs`, `.bcett.byml.zs`, etc.)."
+        },
+        "totk-editor.extraAampExtensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Additional file extensions (without dot) treated as **AAMP** parameter files, e.g. `bcustom`. See `aamp-extensions.json` in the extension folder for the built-in list."
+        },
         "totk-editor.colors.enabled": {
           "type": "boolean",
-          "default": true,
-          "description": "Apply TOTK Editor syntax colors to BYML, BGYML, and MSBT files."
+          "default": false,
+          "description": "Apply optional custom TextMate colors to BYML, BGYML, and MSBT. When off, your theme’s default highlighting is used."
         },
         "totk-editor.colors.tag": {
           "type": "string",
-          "default": "#9CDCFE",
+          "default": "#2778D6",
           "description": "Keys and labels (text before the colon).",
           "format": "color"
         },
@@ -166,11 +443,91 @@
       }
     },
     "configurationDefaults": {
+      "files.associations": {
+        "*.asb": "json",
+        "*.baev": "json",
+        "*.aamp": "yaml",
+        "*.aamp.zs": "yaml",
+        "*.baglblm": "yaml",
+        "*.baglblm.zs": "yaml",
+        "*.baglccr": "yaml",
+        "*.baglccr.zs": "yaml",
+        "*.baglclwd": "yaml",
+        "*.baglclwd.zs": "yaml",
+        "*.baglcube": "yaml",
+        "*.baglcube.zs": "yaml",
+        "*.bagldof": "yaml",
+        "*.bagldof.zs": "yaml",
+        "*.baglenv": "yaml",
+        "*.baglenv.zs": "yaml",
+        "*.baglenvset": "yaml",
+        "*.baglenvset.zs": "yaml",
+        "*.baglfila": "yaml",
+        "*.baglfila.zs": "yaml",
+        "*.bagllmap": "yaml",
+        "*.bagllmap.zs": "yaml",
+        "*.baglmf": "yaml",
+        "*.baglmf.zs": "yaml",
+        "*.baglshpp": "yaml",
+        "*.baglshpp.zs": "yaml",
+        "*.baglsky": "yaml",
+        "*.baglsky.zs": "yaml",
+        "*.bgapkginfo": "yaml",
+        "*.bgapkginfo.zs": "yaml",
+        "*.bgapkglist": "yaml",
+        "*.bgapkglist.zs": "yaml",
+        "*.bgenv": "yaml",
+        "*.bgenv.zs": "yaml",
+        "*.bglght": "yaml",
+        "*.bglght.zs": "yaml",
+        "*.bgmsconf": "yaml",
+        "*.bgmsconf.zs": "yaml",
+        "*.bgsdw": "yaml",
+        "*.bgsdw.zs": "yaml",
+        "*.bphhb": "yaml",
+        "*.bphhb.zs": "yaml",
+        "*.bptcl": "yaml",
+        "*.bptcl.zs": "yaml",
+        "*.bptclconf": "yaml",
+        "*.bptclconf.zs": "yaml",
+        "*.baiprog": "yaml",
+        "*.baiprog.zs": "yaml",
+        "*.baischedule": "yaml",
+        "*.baischedule.zs": "yaml",
+        "*.basset": "yaml",
+        "*.basset.zs": "yaml",
+        "*.bcam": "yaml",
+        "*.bcam.zs": "yaml",
+        "*.bcamera": "yaml",
+        "*.bcamera.zs": "yaml",
+        "*.bchemical": "yaml",
+        "*.bchemical.zs": "yaml",
+        "*.bcomfort": "yaml",
+        "*.bcomfort.zs": "yaml",
+        "*.bcompound": "yaml",
+        "*.bcompound.zs": "yaml",
+        "*.bcurve": "yaml",
+        "*.bcurve.zs": "yaml",
+        "*.bdamage": "yaml",
+        "*.bdamage.zs": "yaml",
+        "*.bdmgparam": "yaml",
+        "*.bdmgparam.zs": "yaml",
+        "*.bevent": "yaml",
+        "*.bevent.zs": "yaml",
+        "*.bmodel": "yaml",
+        "*.bmodel.zs": "yaml",
+        "*.bphysics": "yaml",
+        "*.bphysics.zs": "yaml",
+        "*.bshop": "yaml",
+        "*.bshop.zs": "yaml"
+      },
       "material-icon-theme.files.associations": {
         "**.pack": "package",
         "**.pack.zs": "package",
         "**.sarc": "package",
-        "**.sarc.zs": "package"
+        "**.sarc.zs": "package",
+        "**.genvb": "package",
+        "**.genvb.zs": "package"
       },
       "[byml]": {
         "editor.insertSpaces": true,

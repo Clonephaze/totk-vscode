@@ -4,38 +4,72 @@ VS Code support for editing **Tears of the Kingdom** modding files inside decomp
 
 ## Features
 
-- Customizable syntax colors for BYML / BGYML / MSBT (Settings → **TOTK Editor**)
-- Browse `.pack` / `.sarc` archives (including `.zs` compressed) as folders
+- Syntax highlighting for BYML / MSBT
+- Browse `.pack` / `.sarc` / `.genvb` archives (including `.zs` compressed) as folders
 - Edit `.byml` / `.bgyml` as text
+- Edit **AAMP** parameter files (`.baglenv`, `.bptcl`, `.bphhb`, and [many other extensions](aamp-extensions.json)) as YAML
 - Edit `.msbt` message files as `label: text` lines
+- Edit `.asb` animation state binaries as JSON (merges sibling `.baev` when present)
+- Edit `.baev` animation event archives as JSON
 - Syntax highlighting for BYML-style text and MSBT labels (including numeric IDs)
 
-You need **decompressed** romfs/data on disk (not ROM or single compressed archives at the workspace root without extraction).
+Works with a compressed or decompressed game dump. A game dump **MUST** be provided to edit compressed files.
 
 ## Install and use
 
 1. Install the extension (VSIX or Marketplace).
 2. On first activation, the extension creates a private Python virtual environment and installs `oead`, `zstandard`, and `pymsbt` automatically.
 3. **Requirement:** [Python 3.10+](https://www.python.org/downloads/) must be installed and discoverable (`python` / `python3` on PATH, or Windows `py` launcher).
-4. Open a folder that contains your extracted game files, or run **TOTK: Open SARC Archive**.
+4. Set **TOTK Editor → Romfs Path** to your extracted game dump (folder containing `Pack/ZsDic.pack.zs`) if you work with `.zs` files.
+5. Open your extracted game folder as a normal workspace folder (`file://`), or run **TOTK: Open Archive (.pack, .sarc, .genvb)** to browse one archive.
+
+**Tip:** Leave **Virtual RomFS Workspace** disabled (default) so Explorer delete/rename work on real files. Enable it only if you want `.pack` files to expand inline in a full-folder workspace.
+
+### Where files can be opened
+
+| Location | How it works |
+|----------|----------------|
+| **Inside `.pack` / `.sarc` / `.genvb`** (via `sarc://` workspace) | Browse the archive like a folder; editable files are converted automatically. |
+| **Loose files on disk** (extracted RomFS tree) | Open normally from the explorer — the extension reopens them as editable JSON/text. Or use **TOTK: Open File**. |
+| **Single file** | Command **TOTK: Open File (BYML, AAMP, MSBT, ASB, BAEV)** |
+
+Files opened as plain `file://` binary (garbled text) means Python setup failed or the extension did not activate — run **TOTK: Set Up Python Environment** and reload.
 
 If setup fails, run **TOTK: Set Up Python Environment** from the Command Palette, or set `totk-editor.pythonPath` to your `python.exe`.
 
+### `.zs` compressed files
+
+Most TOTK assets use Nintendo ZSTD dictionaries from `Pack/ZsDic.pack.zs` in your game dump. Set **TOTK Editor → Romfs Path** to the root of your extracted **RomFS** (the folder that contains `Pack/ZsDic.pack.zs`). Without this, `.pack.zs` archives and files like `.byml.zs` fail with *dictionary mismatch*.
+
+The extension picks the correct dictionary per file type (pack, bcett BYML, generic `.zs`, etc.) using the bundled [asb-toolkit](https://github.com/dt-12345/asb) ZSTD helpers.
+
+### BYML hashes and IDs
+
+Unsigned 64-bit values (hashes, placement IDs, etc.) are shown in **NX Editor–compatible** form, e.g. `!ul 0x895d6d80d4cda78d`, not as large decimal numbers. Saving preserves the `!ul` type so values do not turn into incorrect negative integers.
+
+If you edited a file with an older build that wrote bare decimals, re-open the file after updating the extension (or save once) so literals are corrected before writing binary BYML.
+
+### AAMP notes
+
+Many TOTK files use different extensions but share the same **AAMP** binary format (magic `AAMP`). The extension converts them to editable YAML via [oead](https://github.com/TotkMods/oead). Syntax highlighting uses VS Code’s built-in **YAML** mode (not the custom BYML colors).
+
+- Built-in extensions are listed in [`aamp-extensions.json`](aamp-extensions.json) (TOTK + common BotW-style names).
+- Add more with **TOTK Editor → Extra Aamp Extensions** (extension name only, e.g. `bcustom`).
+- Inside archives, files with unknown extensions are still opened if their data starts with `AAMP`.
+
+### ASB / BAEV notes
+
+- Opening an `.asb` file loads the matching `.baev` from the same folder in the archive when it exists (AsNode BAEV).
+- Saving an `.asb` writes both `.asb` and `.baev` if the JSON contains BAEV event data.
+- Animation BAEV files (paired with `.anim.bfres`) can be opened as standalone `.baev` files.
+
 ## Syntax colors
 
-Open Settings and search **TOTK Editor**. Each token type has a color picker:
+By default, BYML / MSBT use your **editor theme’s normal highlighting** (TextMate grammar only). AAMP files use built-in **YAML** highlighting.
 
-| Setting | What it colors |
-|--------|----------------|
-| `colors.tag` | Keys / labels (before `:`) |
-| `colors.string` | String values |
-| `colors.number` | Numbers |
-| `colors.boolean` | `true`, `false`, `null` |
-| `colors.punctuation` | `:`, list `-` |
-| `colors.msbtCommand` | `{cmd:...}` tags in MSBT |
-| `colors.comment` | `#` comments |
+If colors look wrong after upgrading, run **TOTK: Clear Syntax Color Overrides** from the Command Palette, then reload the window.
 
-Turn off **Colors: Enabled** to stop applying TOTK colors. Use **TOTK: Reset Syntax Colors to Defaults** to restore the built-in palette.
+Optional custom colors: enable **TOTK Editor → Colors: Enabled** and adjust the color settings. Use **TOTK: Reset Syntax Colors to Defaults** to turn that off and clear overrides.
 
 ## Bundle and share (`.vsix`)
 
@@ -55,24 +89,11 @@ That produces `totk-vscode-0.0.1.vsix` (version comes from `package.json`). Send
 3. Reload the window when prompted.
 4. First run will download Python libraries into a private venv (one-time setup notification).
 
-**Share via GitHub**
-
-- Attach the `.vsix` to a [Release](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository) tag (e.g. `v0.0.1`).
-- Put install steps in the release notes (Python required, Install from VSIX).
-
-**Publish to the Marketplace (optional)**
-
-1. Create a [publisher](https://marketplace.visualstudio.com/manage) on the Visual Studio Marketplace.
-2. Add to `package.json`: `"publisher": "your-publisher-id"` and bump `"version"` for each release.
-3. Create a [Personal Access Token](https://dev.azure.com/) with Marketplace **Manage** scope.
-4. Run: `npx vsce login your-publisher-id` then `npm run package:vsix` and `npx vsce publish`.
-
-Users can then install by name from the Extensions panel without a VSIX file.
 
 ## Publishing checklist (maintainers)
 
 - Run `npm run package:vsix` so `dist/extension.js` is built before packaging.
-- Ship `totk_bridge.py`, `byml_editor_format.py`, `msbt_editor_format.py`, and `requirements.txt` (included in the VSIX by default).
+- Ship `totk_bridge.py`, `zstd_totk.py`, `aamp_io.py`, `aamp-extensions.json`, `byml_editor_format.py`, `msbt_editor_format.py`, and `requirements.txt` (included in the VSIX by default).
 - Do **not** add `*.py` to `.vscodeignore`.
 - Test a clean machine: install only the VSIX + Python, no manual `pip install`.
 

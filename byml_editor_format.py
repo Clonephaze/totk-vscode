@@ -21,11 +21,24 @@ SCALAR_TYPES = (
 def _fmt_scalar(value) -> str:
     if isinstance(value, bool):
         return 'true' if value else 'false'
-    if isinstance(value, (oead.F32, oead.F64)):
+    if isinstance(value, oead.U64):
+        return f'!ul 0x{int(value) & 0xFFFFFFFFFFFFFFFF:x}'
+    if isinstance(value, oead.S64):
+        signed = int(value)
+        if signed < 0:
+            return f'!sl 0x{signed & 0xFFFFFFFFFFFFFFFF:x}'
+        return f'!sl {signed}'
+    if isinstance(value, oead.U32):
+        return f'!u 0x{int(value) & 0xFFFFFFFF:08x}'
+    if isinstance(value, oead.S32):
+        return str(int(value))
+    if isinstance(value, oead.F64):
+        return f'!f64 {float(value)}'
+    if isinstance(value, oead.F32):
         number = float(value)
         return str(int(number)) if number.is_integer() else str(number)
-    if isinstance(value, (oead.S32, oead.U32, oead.S64, oead.U64, int)):
-        return str(int(value))
+    if isinstance(value, int):
+        return str(value)
     if isinstance(value, oead.Bytes):
         return repr(bytes(value))
     if value is None:
