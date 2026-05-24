@@ -1,7 +1,12 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { execFileSync } from 'child_process';
+import { runBridgeJson } from './bridge';
+import {
+    ensurePythonEnvironment,
+    getCachedPythonExecutable,
+    promptPythonSetup,
+} from './pythonEnv';
 
 const ARCHIVE_FILE_PATTERN = /\.(pack|sarc)(\.zs)?$/i;
 
@@ -64,6 +69,21 @@ class SarcProvider implements vscode.FileSystemProvider {
     readonly onDidChangeFile = this._onDidChangeFile.event;
 
     private fileCache = new Map<string, string[]>();
+
+    constructor(
+        private readonly bridgePath: string,
+        private readonly getPython: () => string,
+    ) {}
+
+    private requirePython(): string {
+        const python = this.getPython();
+        if (!python) {
+            throw new Error(
+                'Python environment is not ready. Run "TOTK: Set Up Python Environment" or install Python 3.10+.',
+            );
+        }
+        return python;
+    }
 
     watch(uri: vscode.Uri): vscode.Disposable {
         return new vscode.Disposable(() => { });
@@ -187,17 +207,10 @@ class SarcProvider implements vscode.FileSystemProvider {
 
         if (!files) {
             console.log(`Loading SARC into memory: ${physicalPath}`);
-            const bridgePath = path.join(__dirname, '..', 'totk_bridge.py');
-            const output = execFileSync('py', ['-3.12', bridgePath, 'list', physicalPath], {
-                encoding: 'utf-8',
-                maxBuffer: 1024 * 1024 * 50,
-            });
-
-            const parsed = JSON.parse(output);
-            if (parsed.error) {
-                throw new Error(parsed.error);
-            }
-            files = parsed;
+            files = runBridgeJson<string[]>(this.requirePython(), this.bridgePath, [
+                'list',
+                physicalPath,
+            ]);
             this.fileCache.set(physicalPath, files!);
             console.log(`Successfully mapped ${files!.length} internal files.`);
         }
@@ -232,16 +245,11 @@ class SarcProvider implements vscode.FileSystemProvider {
 
         try {
             console.log(`Reading: ${internalPath}`);
-            const bridgePath = path.join(__dirname, '..', 'totk_bridge.py');
-            const output = execFileSync('py', ['-3.12', bridgePath, 'read', physicalPath, internalPath], {
-                encoding: 'utf-8',
-                maxBuffer: 1024 * 1024 * 50,
-            });
-
-            const result = JSON.parse(output);
-            if (result.error) {
-                throw new Error(result.error);
-            }
+            const result = runBridgeJson<{ content: string }>(this.requirePython(), this.bridgePath, [
+                'read',
+                physicalPath,
+                internalPath,
+            ]);
 
             return new TextEncoder().encode(result.content);
         } catch (error) {
@@ -265,19 +273,14 @@ class SarcProvider implements vscode.FileSystemProvider {
 
         try {
             console.log(`Writing back to: ${internalPath}`);
-            const bridgePath = path.join(__dirname, '..', 'totk_bridge.py');
             const yamlContent = new TextDecoder().decode(content);
 
-            const output = execFileSync('py', ['-3.12', bridgePath, 'write', physicalPath, internalPath], {
-                encoding: 'utf-8',
-                maxBuffer: 1024 * 1024 * 50,
-                input: yamlContent,
-            });
-
-            const result = JSON.parse(output);
-            if (result.error) {
-                throw new Error(result.error);
-            }
+            runBridgeJson<{ success: boolean }>(
+                this.requirePython(),
+                this.bridgePath,
+                ['write', physicalPath, internalPath],
+                yamlContent,
+            );
 
             this.fileCache.delete(physicalPath);
             console.log('Successfully saved and repacked SARC!');
@@ -292,16 +295,34 @@ class SarcProvider implements vscode.FileSystemProvider {
     rename(oldUri: vscode.Uri, newUri: vscode.Uri, options: { overwrite: boolean }): void { }
 }
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
     console.log('TOTK Editor is now active!');
 
-    const sarcProvider = new SarcProvider();
+    const bridgePath = path.join(context.extensionPath, 'totk_bridge.py');
+    const getPython = () => getCachedPythonExecutable() ?? '';
+
+    const sarcProvider = new SarcProvider(bridgePath, getPython);
     context.subscriptions.push(
         vscode.workspace.registerFileSystemProvider('sarc', sarcProvider, {
             isCaseSensitive: true,
             isReadonly: false,
         }),
     );
+
+    const setupPython = vscode.commands.registerCommand('totk-editor.setupPython', async () => {
+        const python = await ensurePythonEnvironment(context, true);
+        if (python) {
+            void vscode.window.showInformationMessage('TOTK Editor: Python environment is ready.');
+        } else {
+            await promptPythonSetup(context);
+        }
+    });
+    context.subscriptions.push(setupPython);
+
+    const python = await ensurePythonEnvironment(context);
+    if (!python) {
+        await promptPythonSetup(context);
+    }
 
     convertFileWorkspaceFolders();
     context.subscriptions.push(

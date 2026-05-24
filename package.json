@@ -1,5 +1,6 @@
 {
   "name": "totk-vscode",
+  "publisher": "totk-editor",
   "displayName": "totk-vscode",
   "description": "Edits TOTK SARC archives, BYML, and MSBT files",
   "version": "0.0.1",
@@ -14,7 +15,8 @@
     "workspaceContains:**/*.pack",
     "workspaceContains:**/*.sarc",
     "onFileSystem:sarc",
-    "onCommand:totk-editor.openPack"
+    "onCommand:totk-editor.openPack",
+    "onCommand:totk-editor.setupPython"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -30,8 +32,13 @@
     "languages": [
       {
         "id": "byml",
-        "extensions": [".byml"],
-        "aliases": ["BYML", "byml"],
+        "extensions": [
+          ".byml"
+        ],
+        "aliases": [
+          "BYML",
+          "byml"
+        ],
         "configuration": "./language-configuration.json",
         "icon": {
           "light": "./icons/byml.svg",
@@ -40,8 +47,13 @@
       },
       {
         "id": "bgyml",
-        "extensions": [".bgyml"],
-        "aliases": ["Binary BYML", "bgyml"],
+        "extensions": [
+          ".bgyml"
+        ],
+        "aliases": [
+          "Binary BYML",
+          "bgyml"
+        ],
         "configuration": "./language-configuration.json",
         "icon": {
           "light": "./icons/bgyml.svg",
@@ -50,8 +62,13 @@
       },
       {
         "id": "msbt",
-        "extensions": [".msbt"],
-        "aliases": ["MSBT", "msbt"],
+        "extensions": [
+          ".msbt"
+        ],
+        "aliases": [
+          "MSBT",
+          "msbt"
+        ],
         "configuration": "./language-configuration.json",
         "icon": {
           "light": "./icons/msbt.svg",
@@ -80,8 +97,22 @@
       {
         "command": "totk-editor.openPack",
         "title": "TOTK: Open SARC Archive"
+      },
+      {
+        "command": "totk-editor.setupPython",
+        "title": "TOTK: Set Up Python Environment"
       }
     ],
+    "configuration": {
+      "title": "TOTK Editor",
+      "properties": {
+        "totk-editor.pythonPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Optional path to a Python 3.10+ executable used to create the extension's bundled virtual environment. Leave empty to auto-detect (`py`, `python3`, etc.)."
+        }
+      }
+    },
     "configurationDefaults": {
       "material-icon-theme.files.associations": {
         "**.pack": "package",
@@ -99,7 +130,9 @@
                 "entity.name.tag.byml",
                 "source.byml entity.name.tag"
               ],
-              "settings": { "foreground": "#9CDCFE" }
+              "settings": {
+                "foreground": "#9CDCFE"
+              }
             },
             {
               "scope": [
@@ -108,28 +141,36 @@
                 "source.byml string.unquoted",
                 "source.byml string.quoted.double"
               ],
-              "settings": { "foreground": "#CE9178" }
+              "settings": {
+                "foreground": "#CE9178"
+              }
             },
             {
               "scope": [
                 "constant.numeric.byml",
                 "source.byml constant.numeric"
               ],
-              "settings": { "foreground": "#B5CEA8" }
+              "settings": {
+                "foreground": "#B5CEA8"
+              }
             },
             {
               "scope": [
                 "constant.language.boolean.byml",
                 "constant.language.null.byml"
               ],
-              "settings": { "foreground": "#569CD6" }
+              "settings": {
+                "foreground": "#569CD6"
+              }
             },
             {
               "scope": [
                 "punctuation.definition.list.begin.byml",
                 "punctuation.separator.key-value.byml"
               ],
-              "settings": { "foreground": "#D4D4D4" }
+              "settings": {
+                "foreground": "#D4D4D4"
+              }
             }
           ]
         }
@@ -144,7 +185,9 @@
                 "entity.name.tag.byml",
                 "source.byml entity.name.tag"
               ],
-              "settings": { "foreground": "#9CDCFE" }
+              "settings": {
+                "foreground": "#9CDCFE"
+              }
             },
             {
               "scope": [
@@ -153,28 +196,36 @@
                 "source.byml string.unquoted",
                 "source.byml string.quoted.double"
               ],
-              "settings": { "foreground": "#CE9178" }
+              "settings": {
+                "foreground": "#CE9178"
+              }
             },
             {
               "scope": [
                 "constant.numeric.byml",
                 "source.byml constant.numeric"
               ],
-              "settings": { "foreground": "#B5CEA8" }
+              "settings": {
+                "foreground": "#B5CEA8"
+              }
             },
             {
               "scope": [
                 "constant.language.boolean.byml",
                 "constant.language.null.byml"
               ],
-              "settings": { "foreground": "#569CD6" }
+              "settings": {
+                "foreground": "#569CD6"
+              }
             },
             {
               "scope": [
                 "punctuation.definition.list.begin.byml",
                 "punctuation.separator.key-value.byml"
               ],
-              "settings": { "foreground": "#D4D4D4" }
+              "settings": {
+                "foreground": "#D4D4D4"
+              }
             }
           ]
         }
@@ -189,7 +240,9 @@
                 "entity.name.tag.byml",
                 "source.byml entity.name.tag"
               ],
-              "settings": { "foreground": "#9CDCFE" }
+              "settings": {
+                "foreground": "#9CDCFE"
+              }
             },
             {
               "scope": [
@@ -198,28 +251,36 @@
                 "source.byml string.unquoted",
                 "source.byml string.quoted.double"
               ],
-              "settings": { "foreground": "#CE9178" }
+              "settings": {
+                "foreground": "#CE9178"
+              }
             },
             {
               "scope": [
                 "constant.numeric.byml",
                 "source.byml constant.numeric"
               ],
-              "settings": { "foreground": "#B5CEA8" }
+              "settings": {
+                "foreground": "#B5CEA8"
+              }
             },
             {
               "scope": [
                 "constant.language.boolean.byml",
                 "constant.language.null.byml"
               ],
-              "settings": { "foreground": "#569CD6" }
+              "settings": {
+                "foreground": "#569CD6"
+              }
             },
             {
               "scope": [
                 "punctuation.definition.list.begin.byml",
                 "punctuation.separator.key-value.byml"
               ],
-              "settings": { "foreground": "#D4D4D4" }
+              "settings": {
+                "foreground": "#D4D4D4"
+              }
             }
           ]
         }
@@ -233,6 +294,7 @@
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "package:vsix": "npm run package && vsce package",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
@@ -246,6 +308,7 @@
     "@types/vscode": "^1.120.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.9.1",
     "esbuild": "^0.27.3",
     "eslint": "^9.39.3",
     "npm-run-all": "^4.1.5",

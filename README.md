@@ -1,22 +1,75 @@
 # totk-vscode
 
+VS Code support for editing **Tears of the Kingdom** modding files inside decompressed game data.
+
 ## Features
 
-An extension for VSCode that adds TOTK file support. 
-At the moment, you MUST have decompressed game files to edit them.
+- Browse `.pack` / `.sarc` archives (including `.zs` compressed) as folders
+- Edit `.byml` / `.bgyml` as text
+- Edit `.msbt` message files as `label: text` lines
+- Syntax highlighting for BYML-style text and MSBT labels (including numeric IDs)
 
-Current package support:
-.pack
+You need **decompressed** romfs/data on disk (not ROM or single compressed archives at the workspace root without extraction).
 
+## Install and use
 
-Current file support:
-.byml
-.bgyml
+1. Install the extension (VSIX or Marketplace).
+2. On first activation, the extension creates a private Python virtual environment and installs `oead`, `zstandard`, and `pymsbt` automatically.
+3. **Requirement:** [Python 3.10+](https://www.python.org/downloads/) must be installed and discoverable (`python` / `python3` on PATH, or Windows `py` launcher).
+4. Open a folder that contains your extracted game files, or run **TOTK: Open SARC Archive**.
 
+If setup fails, run **TOTK: Set Up Python Environment** from the Command Palette, or set `totk-editor.pythonPath` to your `python.exe`.
 
-![formatting](images/image1.png)
+## Bundle and share (`.vsix`)
 
+A VSIX file is the installable extension package. Build it from the project root:
 
-## Requirements
+```bash
+npm install
+npm run package:vsix
+```
 
-- Python 3.12
+That produces `totk-vscode-0.0.1.vsix` (version comes from `package.json`). Send that file to anyone using VS Code or Cursor.
+
+**Install on another machine**
+
+1. Install [Python 3.10+](https://www.python.org/downloads/) (add to PATH on Windows).
+2. In VS Code / Cursor: Extensions view → `...` menu → **Install from VSIX...** → pick the `.vsix` file.
+3. Reload the window when prompted.
+4. First run will download Python libraries into a private venv (one-time setup notification).
+
+**Share via GitHub**
+
+- Attach the `.vsix` to a [Release](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository) tag (e.g. `v0.0.1`).
+- Put install steps in the release notes (Python required, Install from VSIX).
+
+**Publish to the Marketplace (optional)**
+
+1. Create a [publisher](https://marketplace.visualstudio.com/manage) on the Visual Studio Marketplace.
+2. Add to `package.json`: `"publisher": "your-publisher-id"` and bump `"version"` for each release.
+3. Create a [Personal Access Token](https://dev.azure.com/) with Marketplace **Manage** scope.
+4. Run: `npx vsce login your-publisher-id` then `npm run package:vsix` and `npx vsce publish`.
+
+Users can then install by name from the Extensions panel without a VSIX file.
+
+## Publishing checklist (maintainers)
+
+- Run `npm run package:vsix` so `dist/extension.js` is built before packaging.
+- Ship `totk_bridge.py`, `byml_editor_format.py`, `msbt_editor_format.py`, and `requirements.txt` (included in the VSIX by default).
+- Do **not** add `*.py` to `.vscodeignore`.
+- Test a clean machine: install only the VSIX + Python, no manual `pip install`.
+
+## Development
+
+```bash
+npm install
+npm run compile
+```
+
+Press F5 to launch the Extension Development Host. The dev host uses the same auto-setup logic as production.
+
+Manual Python setup (optional):
+
+```bash
+py -3.12 -m pip install -r requirements.txt
+```
