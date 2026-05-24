@@ -26,11 +26,32 @@ from aamp_io import (
     read_aamp_content,
     write_aamp_bytes,
 )
+from xlink_io import (
+    is_xlnk_binary,
+    is_xlnk_extension,
+    read_xlnk_content,
+    write_xlnk_bytes,
+)
 from archive_resolve import list_archive_files, load_sarc_file, read_archive_file_bytes
 from zstd_totk import compress_container, decompress_container
 
 sys.stdout.reconfigure(encoding='utf-8')
 sys.stdin.reconfigure(encoding='utf-8')
+
+_LARGE_CONTENT_BYTES = 8 * 1024 * 1024
+
+
+def _json_read_payload(content: str) -> dict:
+    if len(content.encode('utf-8')) > _LARGE_CONTENT_BYTES:
+        with tempfile.NamedTemporaryFile(
+            mode='w',
+            encoding='utf-8',
+            suffix='.yaml',
+            delete=False,
+        ) as tmp:
+            tmp.write(content)
+            return {'contentPath': tmp.name}
+    return {'content': content}
 
 
 def get_romfs_path():
@@ -180,6 +201,8 @@ def _file_kind(logical_path: str, file_data: bytes | None = None, romfs_path: st
         return 'baev'
     if is_aamp_extension(logical_path):
         return 'aamp'
+    if is_xlnk_extension(logical_path):
+        return 'xlnk'
     if file_data is not None:
         try:
             data, _, _ = decompress_container(file_data, logical_path, romfs_path)
@@ -187,6 +210,8 @@ def _file_kind(logical_path: str, file_data: bytes | None = None, romfs_path: st
             data = file_data
         if is_aamp_binary(data):
             return 'aamp'
+        if is_xlnk_binary(data):
+            return 'xlnk'
     return None
 
 
@@ -206,9 +231,12 @@ def read_file_content(file_data: bytes, logical_path: str, sarc=None, romfs_path
         if sarc is not None:
             return read_baev_content(file_data, logical_path, romfs_path)
         return read_baev_content_disk(logical_path, romfs_path)
+    if kind == 'xlnk':
+        return read_xlnk_content(file_data, logical_path, romfs_path)
     return (
         f'<Binary Data: {len(file_data)} bytes. '
-        'Editable types: .byml, .bgyml, .msbt, .asb, .baev, AAMP (many extensions — see aamp-extensions.json)>'
+        'Editable types: .byml, .bgyml, .msbt, .asb, .baev, .belnk, .bslnk, '
+        'AAMP (many extensions — see aamp-extensions.json)>'
     )
 
 
@@ -246,6 +274,12 @@ def write_file_content(logical_path: str, editor_text: str, sarc, is_sarc_compre
             save_sarc(archive_path, new_sarc_bytes, is_sarc_compressed)
         else:
             write_baev_disk(logical_path, editor_text, romfs_path)
+    elif kind == 'xlnk':
+        orig = read_archive_file_bytes(archive_path, logical_path, romfs_path)
+        new_bytes = write_xlnk_bytes(orig, editor_text, logical_path, romfs_path)
+        writer = oead.SarcWriter.from_sarc(sarc)
+        writer.files[logical_path] = new_bytes
+        save_sarc(archive_path, writer.write()[1], is_sarc_compressed)
     else:
         raise ValueError(f'Cannot write file type: {logical_path}')
 
@@ -258,7 +292,7 @@ def main():
         if command == 'read-disk':
             file_path = sys.argv[2]
             file_data = Path(file_path).read_bytes()
-            print(json.dumps({'content': read_file_content(file_data, file_path, None, romfs_path)}))
+            print(json.dumps(_json_read_payload(read_file_content(file_data, file_path, None, romfs_path))))
 
         elif command == 'write-disk':
             file_path = sys.argv[2]
@@ -282,6 +316,10 @@ def main():
                 write_asb_disk(file_path, editor_text, romfs_path)
             elif kind == 'baev':
                 write_baev_disk(file_path, editor_text, romfs_path)
+            elif kind == 'xlnk':
+                Path(file_path).write_bytes(
+                    write_xlnk_bytes(Path(file_path).read_bytes(), editor_text, file_path, romfs_path)
+                )
             else:
                 raise ValueError(f'Cannot write file type: {file_path}')
             print(json.dumps({'success': True}))
@@ -297,7 +335,13 @@ def main():
             elif command == 'read':
                 internal_path = sys.argv[3]
                 file_data = read_archive_file_bytes(archive_path, internal_path, romfs_path)
-                print(json.dumps({'content': read_file_content(file_data, internal_path, None, romfs_path)}))
+                print(
+                    json.dumps(
+                        _json_read_payload(
+                            read_file_content(file_data, internal_path, None, romfs_path)
+                        )
+                    )
+                )
 
             elif command == 'write':
                 sarc, is_sarc_compressed = load_sarc(archive_path)

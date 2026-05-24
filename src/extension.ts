@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { runBridgeJson } from './bridge';
+import { runBridgeJson, runBridgeReadContent } from './bridge';
 import {
     ensurePythonEnvironment,
     getCachedPythonExecutable,
@@ -38,10 +38,12 @@ function getBridgeEnv(): NodeJS.ProcessEnv {
     const config = vscode.workspace.getConfiguration('totk-editor');
     const romfsPath = resolveRomfsPath();
     const extraAamp = config.get<string[]>('extraAampExtensions', []);
+    const xlinkTool = config.get<string>('xlinkToolPath', '').trim();
     return {
         ...process.env,
         TOTK_EDITOR_ROMFS: romfsPath,
         TOTK_EXTRA_AAMP_EXTS: extraAamp.map((ext) => ext.replace(/^\./, '')).join(','),
+        ...(xlinkTool ? { TOTK_XLINK_TOOL: xlinkTool } : {}),
     };
 }
 
@@ -249,14 +251,13 @@ class SarcProvider implements vscode.FileSystemProvider {
         if (!this.usesArchiveListing(fsPath)) {
             if (isEditableFile(fsPath)) {
                 try {
-                    const result = runBridgeJson<{ content: string }>(
+                    const content = runBridgeReadContent(
                         this.requirePython(),
                         this.bridgePath,
                         ['read-disk', fsPath],
-                        undefined,
                         getBridgeEnv(),
                     );
-                    return new TextEncoder().encode(result.content);
+                    return new TextEncoder().encode(content);
                 } catch (error) {
                     const message = error instanceof Error ? error.message : String(error);
                     return new TextEncoder().encode(`Error reading file: ${message}`);
@@ -270,15 +271,14 @@ class SarcProvider implements vscode.FileSystemProvider {
 
         try {
             console.log(`Reading: ${diskArchive} / ${filePath}`);
-            const result = runBridgeJson<{ content: string }>(
+            const content = runBridgeReadContent(
                 this.requirePython(),
                 this.bridgePath,
                 ['read', diskArchive, filePath],
-                undefined,
                 getBridgeEnv(),
             );
 
-            return new TextEncoder().encode(result.content);
+            return new TextEncoder().encode(content);
         } catch (error) {
             console.error('Python Read Error:', error);
             return new TextEncoder().encode(`Error reading file: ${error}`);

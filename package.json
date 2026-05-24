@@ -2,7 +2,7 @@
   "name": "totk-vscode",
   "publisher": "totk-editor",
   "displayName": "totk-vscode",
-  "description": "Edits TOTK archives, BYML, AAMP (many extensions), MSBT, ASB, and BAEV files",
+  "description": "Edits TOTK archives, BYML, AAMP (many extensions), MSBT, ASB, BAEV, and XLNK (.belnk / .bslnk) files",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.120.0"
@@ -115,6 +115,24 @@
           "light": "./icons/tkproj.svg",
           "dark": "./icons/tkproj.svg"
         }
+      },
+      {
+        "id": "totk-xlnk",
+        "extensions": [
+          ".belnk",
+          ".bslnk",
+          ".belnk.zs",
+          ".bslnk.zs"
+        ],
+        "aliases": [
+          "XLNK",
+          "belnk",
+          "bslnk"
+        ],
+        "icon": {
+          "light": "./icons/xlnk.svg",
+          "dark": "./icons/xlnk.svg"
+        }
       }
     ],
     "grammars": [
@@ -197,7 +215,7 @@
       },
       {
         "command": "totk-editor.openEditableFile",
-        "title": "TOTK: Open File (BYML, AAMP, MSBT, ASB, BAEV)"
+        "title": "TOTK: Open File (BYML, AAMP, MSBT, ASB, BAEV, belnk, bslnk)"
       },
       {
         "command": "totk-editor.setupPython",
@@ -392,6 +410,11 @@
           },
           "default": [],
           "markdownDescription": "Additional file extensions (without dot) treated as **AAMP** parameter files, e.g. `bcustom`. See `aamp-extensions.json` in the extension folder for the built-in list."
+        },
+        "totk-editor.xlinkToolPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Optional path to [xlink_tool](https://github.com/dt-12345/xlink2) for `.belnk` / `.bslnk` (XLNK) conversion. Windows builds bundle `vendor/xlink2/xlink_tool.exe`; leave empty to use that default."
         },
         "totk-editor.colors.enabled": {
           "type": "boolean",

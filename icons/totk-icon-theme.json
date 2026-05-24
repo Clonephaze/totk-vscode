@@ -15,6 +15,9 @@
     },
     "_totk_tkproj": {
       "iconPath": "./tkproj.svg"
+    },
+    "_totk_xlnk": {
+      "iconPath": "./xlnk.svg"
     }
   },
   "folderNames": {
@@ -43,7 +46,11 @@
     "byml": "_totk_byml",
     "bgyml": "_totk_bgyml",
     "msbt": "_totk_msbt",
-    "tkproj": "_totk_tkproj"
+    "tkproj": "_totk_tkproj",
+    "belnk": "_totk_xlnk",
+    "bslnk": "_totk_xlnk",
+    "belnk.zs": "_totk_xlnk",
+    "bslnk.zs": "_totk_xlnk"
   },
   "fileNames": {
     ".tkproj": "_totk_tkproj"
@@ -51,6 +58,7 @@
   "languageIds": {
     "byml": "_totk_byml",
     "bgyml": "_totk_bgyml",
-    "msbt": "_totk_msbt"
+    "msbt": "_totk_msbt",
+    "totk-xlnk": "_totk_xlnk"
   }
 }

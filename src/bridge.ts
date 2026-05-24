@@ -1,8 +1,8 @@
 import { execFileSync } from 'child_process';
+import * as fs from 'fs';
 import * as path from 'path';
 
 const MAX_BUFFER = 1024 * 1024 * 50;
-
 export function runBridge(
     pythonExecutable: string,
     bridgePath: string,
@@ -33,3 +33,28 @@ export function runBridgeJson<T>(
     }
     return result;
 }
+
+type BridgeReadPayload = { content?: string; contentPath?: string; error?: string };
+
+/** Read editable file text from the bridge (supports spill files for large XLNK YAML). */
+export function runBridgeReadContent(
+    pythonExecutable: string,
+    bridgePath: string,
+    args: string[],
+    env?: NodeJS.ProcessEnv,
+): string {
+    const result = runBridgeJson<BridgeReadPayload>(pythonExecutable, bridgePath, args, undefined, env);
+    if (result.contentPath) {
+        try {
+            return fs.readFileSync(result.contentPath, 'utf-8');
+        } finally {
+            try {
+                fs.unlinkSync(result.contentPath);
+            } catch {
+                /* best-effort cleanup */
+            }
+        }
+    }
+    return result.content ?? '';
+}
+

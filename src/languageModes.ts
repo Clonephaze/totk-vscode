@@ -16,6 +16,9 @@ export function languageIdForPath(filePath: string): string | undefined {
     if (isAampExtension(filePath)) {
         return 'yaml';
     }
+    if (/\.(belnk|bslnk)(\.zs)?$/i.test(lower)) {
+        return 'yaml';
+    }
 
     return undefined;
 }

@@ -11,6 +11,9 @@ export function isEditableFile(filePath: string): boolean {
     if (/\.baev(\.zs)?$/i.test(lower)) {
         return true;
     }
+    if (/\.(belnk|bslnk)(\.zs)?$/i.test(lower)) {
+        return true;
+    }
     return isAampExtension(filePath);
 }
 

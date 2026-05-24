@@ -11,6 +11,7 @@ VS Code support for editing **Tears of the Kingdom** game files.
 - Edit `.msbt` message files as `label: text` lines
 - Edit `.asb` animation state binaries as JSON (merges sibling `.baev` when present)
 - Edit `.baev` animation event archives as JSON
+- Edit `.belnk` / `.bslnk` XLNK sound/effect link databases as YAML (via bundled [xlink_tool](https://github.com/dt-12345/xlink2))
 - Syntax highlighting for BYML-style text and MSBT labels (including numeric IDs)
 
 Works with a compressed or decompressed game dump. A game dump **MUST** be provided to edit compressed files.
@@ -31,9 +32,15 @@ Works with a compressed or decompressed game dump. A game dump **MUST** be provi
 |----------|----------------|
 | **Inside `.pack` / `.sarc` / `.genvb`** (via `sarc://` workspace) | Browse the archive like a folder; editable files are converted automatically. |
 | **Loose files on disk** (extracted RomFS tree) | Open normally from the explorer — the extension reopens them as editable JSON/text. Or use **TOTK: Open File**. |
-| **Single file** | Command **TOTK: Open File (BYML, AAMP, MSBT, ASB, BAEV)** |
+| **Single file** | Command **TOTK: Open File (BYML, AAMP, MSBT, ASB, BAEV, belnk, bslnk)** |
 
 Files opened as plain `file://` binary (garbled text) means Python setup failed or the extension did not activate — run **TOTK: Set Up Python Environment** and reload.
+
+### XLNK (.belnk / .bslnk) notes
+
+- Binary files use the `XLNK` magic header. The editor shows them as YAML text (often very large — hundreds of thousands of lines).
+- Conversion uses `vendor/xlink2/xlink_tool.exe` on Windows (from [dt-12345/xlink2](https://github.com/dt-12345/xlink2)). On Linux/macOS, place `xlink_tool` there or set **TOTK Editor → Xlink Tool Path** / env `TOTK_XLINK_TOOL`.
+- `.belnk.zs` / `.bslnk.zs` need **Romfs Path** set (same as other `.zs` assets) so ZSTD dictionaries apply.
 
 If setup fails, run **TOTK: Set Up Python Environment** from the Command Palette, or set `totk-editor.pythonPath` to your `python.exe`.
 
@@ -93,7 +100,7 @@ That produces `totk-vscode-0.0.1.vsix` (version comes from `package.json`). This
 ## Publishing checklist (maintainers)
 
 - Run `npm run package:vsix` so `dist/extension.js` is built before packaging.
-- Ship `totk_bridge.py`, `zstd_totk.py`, `aamp_io.py`, `aamp-extensions.json`, `byml_editor_format.py`, `msbt_editor_format.py`, and `requirements.txt` (included in the VSIX by default).
+- Ship `totk_bridge.py`, `xlink_io.py`, `zstd_totk.py`, `aamp_io.py`, `aamp-extensions.json`, `byml_editor_format.py`, `msbt_editor_format.py`, `vendor/xlink2/xlink_tool.exe`, and `requirements.txt` (included in the VSIX by default).
 - Do **not** add `*.py` to `.vscodeignore`.
 - Test a clean machine: install only the VSIX + Python, no manual `pip install`.
 

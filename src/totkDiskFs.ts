@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { runBridgeJson } from './bridge';
+import { runBridgeJson, runBridgeReadContent } from './bridge';
 import { isArchiveFile } from './archives';
 import { createDiskDirectory, deleteDiskPath, renameDiskPath } from './diskFsOps';
 import { isEditableFile } from './editableFiles';
@@ -71,14 +71,13 @@ export class TotkDiskFileSystemProvider implements vscode.FileSystemProvider {
         }
 
         try {
-            const result = runBridgeJson<{ content: string }>(
+            const content = runBridgeReadContent(
                 this.requirePython(),
                 this.bridgePath,
                 ['read-disk', diskPath],
-                undefined,
                 this.getBridgeEnv(),
             );
-            return new TextEncoder().encode(result.content);
+            return new TextEncoder().encode(content);
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             return new TextEncoder().encode(`Error reading file: ${message}`);
