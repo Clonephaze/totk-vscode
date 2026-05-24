@@ -1,6 +1,6 @@
 # totk-vscode
 
-VS Code support for editing **Tears of the Kingdom** modding files inside decompressed game data.
+VS Code support for editing **Tears of the Kingdom** game files.
 
 ## Features
 
