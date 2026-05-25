@@ -2,6 +2,7 @@ import io
 import json
 import os
 import sys
+import base64
 import tempfile
 import contextlib
 from pathlib import Path
@@ -32,7 +33,14 @@ from xlink_io import (
     read_xlnk_content,
     write_xlnk_bytes,
 )
-from archive_resolve import list_archive_files, load_sarc_file, read_archive_file_bytes
+from archive_resolve import (
+    delete_archive_entry,
+    list_archive_files,
+    load_sarc_file,
+    read_archive_file_bytes,
+    rename_archive_entry,
+    write_archive_file_bytes,
+)
 from zstd_totk import compress_container, decompress_container
 
 sys.stdout.reconfigure(encoding='utf-8')
@@ -88,6 +96,8 @@ def save_sarc(archive_path, sarc_bytes, is_sarc_compressed):
 
 def read_byml_content(file_data, logical_path='', romfs_path=''):
     file_data, _, _ = decompress_container(file_data, logical_path, romfs_path)
+    if len(file_data) == 0:
+        return '{}\n'
 
     if not (file_data.startswith(b'YB') or file_data.startswith(b'BY')):
         return f'<Unknown BYML Magic: {file_data[:4]}>'
@@ -117,6 +127,12 @@ def read_msbt_content(file_data, logical_path='', romfs_path=''):
     from pymsbt.msbt import MSBTFile
 
     file_data, _, _ = decompress_container(file_data, logical_path, romfs_path)
+    if len(file_data) == 0:
+        return (
+            '# New MSBT file detected.\n'
+            '# Creating MSBT from empty data is not supported yet.\n'
+            '# Copy an existing MSBT as a template, then edit labels.\n'
+        )
 
     with tempfile.NamedTemporaryFile(suffix='.msbt', delete=False) as tmp:
         tmp.write(file_data)
@@ -177,6 +193,8 @@ def write_byml_bytes(orig_file_data, new_yaml, logical_path='', romfs_path=''):
     orig_file_data, is_zstd, is_yaz0 = decompress_container(
         orig_file_data, logical_path, romfs_path
     )
+    if logical_path.lower().endswith('.zs'):
+        is_zstd = True
 
     if orig_file_data.startswith(b'BY'):
         big_endian = True
@@ -213,6 +231,12 @@ def write_msbt_bytes(orig_file_data, editor_text, logical_path='', romfs_path=''
     orig_file_data, is_zstd, is_yaz0 = decompress_container(
         orig_file_data, logical_path, romfs_path
     )
+    if logical_path.lower().endswith('.zs'):
+        is_zstd = True
+    if len(orig_file_data) == 0:
+        raise ValueError(
+            'Cannot create MSBT from empty file yet. Copy an existing .msbt as a template first.'
+        )
 
     with tempfile.NamedTemporaryFile(suffix='.msbt', delete=False) as tmp:
         tmp.write(orig_file_data)
@@ -409,6 +433,24 @@ def main():
                         {'path': export_archive_file_to_temp(archive_path, internal_path, romfs_path)}
                     )
                 )
+
+            elif command == 'write-raw':
+                internal_path = sys.argv[3]
+                encoded = sys.stdin.read()
+                raw = base64.b64decode(encoded) if encoded else b''
+                write_archive_file_bytes(archive_path, internal_path, raw, romfs_path)
+                print(json.dumps({'success': True}))
+
+            elif command == 'delete-entry':
+                internal_path = sys.argv[3]
+                delete_archive_entry(archive_path, internal_path, romfs_path)
+                print(json.dumps({'success': True}))
+
+            elif command == 'rename-entry':
+                old_path = sys.argv[3]
+                new_path = sys.argv[4]
+                rename_archive_entry(archive_path, old_path, new_path, romfs_path)
+                print(json.dumps({'success': True}))
 
             elif command == 'write':
                 sarc, is_sarc_compressed = load_sarc(archive_path)

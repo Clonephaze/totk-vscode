@@ -93,6 +93,11 @@ export class TotkDiskFileSystemProvider implements vscode.FileSystemProvider {
             return;
         }
 
+        if (!fs.existsSync(diskPath)) {
+            fs.writeFileSync(diskPath, content);
+            return;
+        }
+
         try {
             runBridgeJson<{ success: boolean }>(
                 this.requirePython(),

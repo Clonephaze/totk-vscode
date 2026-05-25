@@ -355,37 +355,37 @@
         },
         {
           "command": "totk-editor.archiveNewFile",
-          "when": "view == totk-editor.archives && (viewItem == archiveRoot || viewItem == archiveDir)",
+          "when": "view == totk-editor.archives && (viewItem == archiveRoot || viewItem == archiveDir || viewItem == archiveVirtualDir || viewItem == archivePackage)",
           "group": "1_create@1"
         },
         {
           "command": "totk-editor.archiveNewFolder",
-          "when": "view == totk-editor.archives && (viewItem == archiveRoot || viewItem == archiveDir)",
+          "when": "view == totk-editor.archives && (viewItem == archiveRoot || viewItem == archiveDir || viewItem == archiveVirtualDir || viewItem == archivePackage)",
           "group": "1_create@2"
         },
         {
           "command": "totk-editor.archiveRename",
-          "when": "view == totk-editor.archives && (viewItem == archiveFile || viewItem == archivePackage || viewItem == archiveDir)",
+          "when": "view == totk-editor.archives && (viewItem == archiveFile || viewItem == archiveVirtualFile || viewItem == archivePackage || viewItem == archiveDir || viewItem == archiveVirtualDir)",
           "group": "7_modification@1"
         },
         {
           "command": "totk-editor.archiveDelete",
-          "when": "view == totk-editor.archives && (viewItem == archiveFile || viewItem == archivePackage || viewItem == archiveDir)",
+          "when": "view == totk-editor.archives && (viewItem == archiveFile || viewItem == archiveVirtualFile || viewItem == archivePackage || viewItem == archiveDir || viewItem == archiveVirtualDir)",
           "group": "7_modification@2"
         },
         {
           "command": "totk-editor.archiveCopy",
-          "when": "view == totk-editor.archives && (viewItem == archiveFile || viewItem == archivePackage || viewItem == archiveDir)",
+          "when": "view == totk-editor.archives && (viewItem == archiveFile || viewItem == archiveVirtualFile || viewItem == archivePackage || viewItem == archiveDir || viewItem == archiveVirtualDir)",
           "group": "9_cutcopypaste@1"
         },
         {
           "command": "totk-editor.archiveCut",
-          "when": "view == totk-editor.archives && (viewItem == archiveFile || viewItem == archivePackage || viewItem == archiveDir)",
+          "when": "view == totk-editor.archives && (viewItem == archiveFile || viewItem == archiveVirtualFile || viewItem == archivePackage || viewItem == archiveDir || viewItem == archiveVirtualDir)",
           "group": "9_cutcopypaste@2"
         },
         {
           "command": "totk-editor.archivePaste",
-          "when": "view == totk-editor.archives && (viewItem == archiveRoot || viewItem == archiveDir)",
+          "when": "view == totk-editor.archives && (viewItem == archiveRoot || viewItem == archiveDir || viewItem == archiveVirtualDir || viewItem == archivePackage)",
           "group": "9_cutcopypaste@3"
         },
         {

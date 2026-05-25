@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import { Buffer } from 'buffer';
 import { runBridgeJson, runBridgeReadContent } from './bridge';
 import {
     ensurePythonEnvironment,
@@ -138,7 +139,7 @@ class SarcProvider implements vscode.FileSystemProvider {
         files: string[],
         parentPrefix: string,
         name: string,
-    ): vscode.FileType {
+    ): vscode.FileType | undefined {
         const fullPath = parentPrefix ? `${parentPrefix}${name}` : name;
         const hasChildren = files.some(
             (entry) => entry.length > fullPath.length + 1 && entry.startsWith(`${fullPath}/`),
@@ -149,28 +150,25 @@ class SarcProvider implements vscode.FileSystemProvider {
         if (files.includes(fullPath)) {
             return vscode.FileType.File;
         }
-        return vscode.FileType.Directory;
+        return undefined;
     }
 
-    private isDirectoryLocator(diskArchive: string, locator: string): boolean {
+    private entryTypeForLocator(diskArchive: string, locator: string): vscode.FileType | undefined {
         if (!locator) {
-            return true;
+            return vscode.FileType.Directory;
         }
 
         const normalized = locator.replace(/\\/g, '/');
         const name = normalized.split('/').pop() ?? '';
         if (isArchiveFile(name)) {
-            return true;
+            return vscode.FileType.Directory;
         }
 
         const parentLocator = normalized.includes('/')
             ? normalized.replace(/\/[^/]+$/, '')
             : '';
         const files = this.loadArchiveListing(diskArchive, parentLocator);
-        return (
-            this.entryTypeInListing(files, this.listingPrefix(parentLocator), name) ===
-            vscode.FileType.Directory
-        );
+        return this.entryTypeInListing(files, this.listingPrefix(parentLocator), name);
     }
 
     private isMutatableDiskPath(fsPath: string): boolean {
@@ -239,12 +237,15 @@ class SarcProvider implements vscode.FileSystemProvider {
 
         const diskArchive = this.getDiskArchive(fsPath);
         const locator = this.getLocator(fsPath, diskArchive);
-
-        if (this.isDirectoryLocator(diskArchive, locator)) {
-            return { type: vscode.FileType.Directory, ctime: 0, mtime: 0, size: 0 };
+        const entryType = this.entryTypeForLocator(diskArchive, locator);
+        if (entryType === vscode.FileType.Directory) {
+            return { type: entryType, ctime: 0, mtime: 0, size: 0 };
+        }
+        if (entryType === vscode.FileType.File) {
+            return { type: entryType, ctime: 0, mtime: 0, size: 100 };
         }
 
-        return { type: vscode.FileType.File, ctime: 0, mtime: 0, size: 100 };
+        throw vscode.FileSystemError.FileNotFound(fsPath);
     }
 
     readDirectory(uri: vscode.Uri): [string, vscode.FileType][] {
@@ -271,7 +272,10 @@ class SarcProvider implements vscode.FileSystemProvider {
             if (!name) {
                 continue;
             }
-            result.set(name, this.entryTypeInListing(files, prefix, name));
+            const entryType = this.entryTypeInListing(files, prefix, name);
+            if (entryType !== undefined) {
+                result.set(name, entryType);
+            }
         }
 
         return Array.from(result.entries());
@@ -349,11 +353,16 @@ class SarcProvider implements vscode.FileSystemProvider {
 
     createDirectory(uri: vscode.Uri): void {
         const fsPath = uri.fsPath;
-        if (!this.isMutatableDiskPath(fsPath)) {
-            this.rejectArchiveMutation('create folders in');
+        if (this.isMutatableDiskPath(fsPath)) {
+            createDiskDirectory(fsPath);
+            this.notifyChanged(uri, vscode.FileChangeType.Created);
+            return;
         }
-        createDiskDirectory(fsPath);
-        this.notifyChanged(uri, vscode.FileChangeType.Created);
+
+        // SARC does not store empty directories explicitly.
+        throw vscode.FileSystemError.NoPermissions(
+            'Cannot create empty folders inside archives. Create a file in that folder instead.',
+        );
     }
 
     writeFile(uri: vscode.Uri, content: Uint8Array, options: { create: boolean; overwrite: boolean }): void {
@@ -361,6 +370,10 @@ class SarcProvider implements vscode.FileSystemProvider {
 
         if (this.isMutatableDiskPath(fsPath)) {
             if (isEditableFile(fsPath)) {
+                if (!fs.existsSync(fsPath)) {
+                    fs.writeFileSync(fsPath, content);
+                    return;
+                }
                 try {
                     const text = new TextDecoder().decode(content);
                     runBridgeJson<{ success: boolean }>(
@@ -386,15 +399,25 @@ class SarcProvider implements vscode.FileSystemProvider {
 
         try {
             console.log(`Writing back to: ${diskArchive} / ${filePath}`);
-            const yamlContent = new TextDecoder().decode(content);
-
-            runBridgeJson<{ success: boolean }>(
-                this.requirePython(),
-                this.bridgePath,
-                ['write', diskArchive, filePath],
-                yamlContent,
-                getBridgeEnv(),
-            );
+            if (isEditableFile(fsPath) && content.length > 0 && !isLikelyBinaryBuffer(content)) {
+                const yamlContent = new TextDecoder().decode(content);
+                runBridgeJson<{ success: boolean }>(
+                    this.requirePython(),
+                    this.bridgePath,
+                    ['write', diskArchive, filePath],
+                    yamlContent,
+                    getBridgeEnv(),
+                );
+            } else {
+                const encoded = Buffer.from(content).toString('base64');
+                runBridgeJson<{ success: boolean }>(
+                    this.requirePython(),
+                    this.bridgePath,
+                    ['write-raw', diskArchive, filePath],
+                    encoded,
+                    getBridgeEnv(),
+                );
+            }
 
             for (const key of [...this.fileCache.keys()]) {
                 if (key.startsWith(`${diskArchive}::`)) {
@@ -411,20 +434,58 @@ class SarcProvider implements vscode.FileSystemProvider {
 
     delete(uri: vscode.Uri, options: { recursive: boolean }): void {
         const fsPath = uri.fsPath;
-        if (!this.isMutatableDiskPath(fsPath)) {
-            this.rejectArchiveMutation('delete files from');
+        if (this.isMutatableDiskPath(fsPath)) {
+            deleteDiskPath(fsPath, options.recursive);
+            this.notifyChanged(uri, vscode.FileChangeType.Deleted);
+            return;
         }
-        deleteDiskPath(fsPath, options.recursive);
+
+        const diskArchive = this.getDiskArchive(fsPath);
+        const filePath = this.getLocator(fsPath, diskArchive);
+        runBridgeJson<{ success: boolean }>(
+            this.requirePython(),
+            this.bridgePath,
+            ['delete-entry', diskArchive, filePath],
+            undefined,
+            getBridgeEnv(),
+        );
+        for (const key of [...this.fileCache.keys()]) {
+            if (key.startsWith(`${diskArchive}::`)) {
+                this.fileCache.delete(key);
+            }
+        }
         this.notifyChanged(uri, vscode.FileChangeType.Deleted);
     }
 
     rename(oldUri: vscode.Uri, newUri: vscode.Uri, options: { overwrite: boolean }): void {
         const oldPath = oldUri.fsPath;
         const newPath = newUri.fsPath;
-        if (!this.isMutatableDiskPath(oldPath) || !this.isMutatableDiskPath(newPath)) {
-            this.rejectArchiveMutation('rename files in');
+        if (this.isMutatableDiskPath(oldPath) && this.isMutatableDiskPath(newPath)) {
+            renameDiskPath(oldPath, newPath, options.overwrite);
+            this.notifyChanged(oldUri, vscode.FileChangeType.Deleted);
+            this.notifyChanged(newUri, vscode.FileChangeType.Created);
+            return;
         }
-        renameDiskPath(oldPath, newPath, options.overwrite);
+
+        const oldDiskArchive = this.getDiskArchive(oldPath);
+        const newDiskArchive = this.getDiskArchive(newPath);
+        if (oldDiskArchive !== newDiskArchive) {
+            this.rejectArchiveMutation('move files across different archives');
+        }
+        const oldLocator = this.getLocator(oldPath, oldDiskArchive);
+        const newLocator = this.getLocator(newPath, newDiskArchive);
+        runBridgeJson<{ success: boolean }>(
+            this.requirePython(),
+            this.bridgePath,
+            ['rename-entry', oldDiskArchive, oldLocator, newLocator],
+            undefined,
+            getBridgeEnv(),
+        );
+        for (const key of [...this.fileCache.keys()]) {
+            if (key.startsWith(`${oldDiskArchive}::`)) {
+                this.fileCache.delete(key);
+            }
+        }
         this.notifyChanged(oldUri, vscode.FileChangeType.Deleted);
         this.notifyChanged(newUri, vscode.FileChangeType.Created);
     }

@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { isPathInsideArchive } from './archives';
 import { toSarcUri, type ArchiveTreeItem } from './archiveTree';
+import { isAampExtension } from './aampExtensions';
 
 let archiveTreeView: vscode.TreeView<ArchiveTreeItem> | undefined;
 
@@ -38,11 +39,96 @@ function selectedItems(item?: ArchiveTreeItem): ArchiveTreeItem[] {
     return getArchiveSelection();
 }
 
+function isMsbtFileName(name: string): boolean {
+    return /\.msbt(\.zs)?$/i.test(name);
+}
+
+function isBymlFileName(name: string): boolean {
+    return /\.(byml|bgyml)(\.zs)?$/i.test(name);
+}
+
+type TemplatePromptConfig = {
+    kindLabel: string;
+    filters: Record<string, string[]>;
+};
+
+function templatePromptConfigForName(name: string): TemplatePromptConfig | undefined {
+    if (isMsbtFileName(name)) {
+        return {
+            kindLabel: 'MSBT',
+            filters: { MSBT: ['msbt', 'zs'], All: ['*'] },
+        };
+    }
+    if (isBymlFileName(name)) {
+        return {
+            kindLabel: 'BYML',
+            filters: { BYML: ['byml', 'bgyml', 'zs'], All: ['*'] },
+        };
+    }
+    if (isAampExtension(name)) {
+        return {
+            kindLabel: 'AAMP',
+            filters: { AAMP: ['zs'], All: ['*'] },
+        };
+    }
+    return undefined;
+}
+
+async function initialContentForNewFile(name: string): Promise<Uint8Array | undefined> {
+    const promptConfig = templatePromptConfigForName(name);
+    if (!promptConfig) {
+        return new Uint8Array();
+    }
+
+    const choice = await vscode.window.showQuickPick(
+        [
+            {
+                label: `Use existing ${promptConfig.kindLabel} as template...`,
+                description: `Recommended: creates a valid ${promptConfig.kindLabel} file immediately`,
+            },
+            {
+                label: 'Create empty file',
+                description:
+                    promptConfig.kindLabel === 'MSBT'
+                        ? 'MSBT may not be writable until replaced with a valid template'
+                        : 'Creates an empty file and lets converter build from text on first save',
+            },
+        ],
+        {
+            title: `New ${promptConfig.kindLabel} file`,
+            placeHolder: `Choose how to initialize this ${promptConfig.kindLabel}`,
+        },
+    );
+
+    if (!choice) {
+        return undefined;
+    }
+
+    if (choice.label === 'Create empty file') {
+        return new Uint8Array();
+    }
+
+    const picked = await vscode.window.showOpenDialog({
+        canSelectMany: false,
+        canSelectFiles: true,
+        canSelectFolders: false,
+        title: `Pick ${promptConfig.kindLabel} template file`,
+        filters: promptConfig.filters,
+    });
+    if (!picked?.[0]) {
+        return undefined;
+    }
+
+    return await vscode.workspace.fs.readFile(picked[0]);
+}
+
 function isDiskMutableItem(item: ArchiveTreeItem): boolean {
     return (
         item.contextValue === 'archiveFile' ||
+        item.contextValue === 'archiveVirtualFile' ||
         item.contextValue === 'archivePackage' ||
         item.contextValue === 'archiveDir' ||
+        item.contextValue === 'archiveVirtualDir' ||
         item.contextValue === 'archiveRoot'
     );
 }
@@ -88,18 +174,7 @@ async function resolveTargetFolder(item?: ArchiveTreeItem): Promise<vscode.Uri |
         target.contextValue === 'archiveRoot' ||
         target.contextValue === 'archiveVirtualDir'
     ) {
-        if (target.contextValue === 'archiveVirtualDir') {
-            void vscode.window.showWarningMessage(
-                'Cannot create files inside an archive. Create on disk beside the archive file instead.',
-            );
-            return undefined;
-        }
         return target.resourceUri;
-    }
-
-    if (isPathInsideArchive(target.resourceUri.fsPath)) {
-        void vscode.window.showWarningMessage('Cannot create files inside an archive from here.');
-        return undefined;
     }
 
     return target.resourceUri;
@@ -221,7 +296,11 @@ export function registerArchiveFileCommands(context: vscode.ExtensionContext): v
                 }
                 const target = vscode.Uri.joinPath(folderUri, name);
                 try {
-                    await vscode.workspace.fs.writeFile(target, new Uint8Array());
+                    const initial = await initialContentForNewFile(name);
+                    if (initial === undefined) {
+                        return;
+                    }
+                    await vscode.workspace.fs.writeFile(target, initial);
                     refreshArchives();
                     await vscode.window.showTextDocument(target);
                 } catch (error) {

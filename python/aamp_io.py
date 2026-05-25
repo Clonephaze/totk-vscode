@@ -62,6 +62,11 @@ def is_aamp_binary(file_data: bytes) -> bool:
 
 def read_aamp_content(file_data: bytes, logical_path: str = '', romfs_path: str = '') -> str:
     file_data, _, _ = _decompress_aamp(file_data, logical_path, romfs_path)
+    if len(file_data) == 0:
+        try:
+            return oead.aamp.ParameterIO().to_text()
+        except Exception:
+            return ''
     if not is_aamp_binary(file_data):
         magic = file_data[:4]
         return f'<Not AAMP (expected AAMP magic, got {magic!r}): {len(file_data)} bytes>'
@@ -71,6 +76,8 @@ def read_aamp_content(file_data: bytes, logical_path: str = '', romfs_path: str 
 
 def write_aamp_bytes(orig_file_data: bytes, editor_text: str, logical_path: str = '', romfs_path: str = '') -> bytes:
     orig_file_data, is_zstd, is_yaz0 = _decompress_aamp(orig_file_data, logical_path, romfs_path)
+    if logical_path.lower().endswith('.zs'):
+        is_zstd = True
     pio = oead.aamp.ParameterIO.from_text(editor_text)
     new_bytes = pio.to_binary()
     return _recompress_aamp(new_bytes, logical_path, romfs_path, is_zstd, is_yaz0)
