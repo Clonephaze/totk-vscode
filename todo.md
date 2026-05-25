@@ -15,7 +15,17 @@
 - tkmm options
 - tkcl parser
 
-# 5th
+## 5th
 - organize repo ✅
 - abstract editable files into configs
 - ainb file handling ✅ (Completed by Mind)
+
+## Aster
+- Icons:
+- - ✅ MSBT
+- - ✅ BGYML/BYML/AAMP
+- - ✅ ASB/BAEV
+- - ✅ XLINK
+- - Material Animations
+- - Node-Based formats
+- - BFRES Family (separate icons)
