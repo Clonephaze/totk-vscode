@@ -130,6 +130,43 @@ def read_msbt_content(file_data, logical_path='', romfs_path=''):
         os.unlink(tmp_path)
 
 
+def read_ainb_content(file_data: bytes, logical_path: str = '', romfs_path: str = '') -> str:
+    import shutil
+    import subprocess
+
+    payload, _, _ = decompress_container(file_data, logical_path, romfs_path)
+    if len(payload) < 4:
+        return f'<Invalid AINB: {len(payload)} bytes>'
+
+    stem = Path(logical_path).name.replace('\\', '/').split('/')[-1] or 'file.ainb'
+    with tempfile.TemporaryDirectory(prefix='totk-ainb-') as tmp_dir:
+        in_path = Path(tmp_dir) / stem
+        if in_path.suffix.lower() != '.ainb':
+            in_path = in_path.with_suffix('.ainb')
+        in_path.write_bytes(payload)
+
+        cmd = [shutil.which('ainb') or '', str(in_path)]
+        if not cmd[0]:
+            # Fallback when CLI entrypoint is not on PATH inside the extension environment.
+            cmd = [sys.executable, '-m', 'ainb', str(in_path)]
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or '').strip() or f'exit {result.returncode}'
+            raise ValueError(f'AINB conversion failed: {detail}')
+
+        stdout = (result.stdout or '').strip()
+        if stdout:
+            return stdout
+
+        # Some builds write a sibling .json file instead of stdout.
+        out_json = in_path.with_suffix('.json')
+        if out_json.is_file():
+            return out_json.read_text(encoding='utf-8')
+
+        raise ValueError('AINB conversion produced no output.')
+
+
 def write_byml_bytes(orig_file_data, new_yaml, logical_path='', romfs_path=''):
     orig_file_data, is_zstd, is_yaz0 = decompress_container(
         orig_file_data, logical_path, romfs_path
@@ -246,10 +283,7 @@ def read_file_content(file_data: bytes, logical_path: str, sarc=None, romfs_path
     if kind == 'xlnk':
         return read_xlnk_content(file_data, logical_path, romfs_path)
     if kind == 'ainb':
-        import subprocess, shutil
-        bin_path = shutil.which('ainb')
-        result = subprocess.run([bin_path, logical_path], capture_output=True, text=True, check=True)
-        return result.stdout
+        return read_ainb_content(file_data, logical_path, romfs_path)
     return (
         f'<Binary Data: {len(file_data)} bytes. '
         'Editable types: .byml, .bgyml, .msbt, .asb, .baev, .belnk, .bslnk, '
