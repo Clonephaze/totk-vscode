@@ -256,12 +256,12 @@
       "activitybar": [
         {
           "id": "totk-editor",
-          "title": "TOTK Archives",
+          "title": "Your Mods",
           "icon": "icons/archives.svg"
         },
         {
           "id": "totk-editor-dump",
-          "title": "Game Dump",
+          "title": "TotK Dump",
           "icon": "icons/dump.svg"
         }
       ]
@@ -270,7 +270,7 @@
       "totk-editor": [
         {
           "id": "totk-editor.archives",
-          "name": "Archives"
+          "name": "Project Folders"
         }
       ],
       "totk-editor-dump": [
