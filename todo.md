@@ -17,4 +17,4 @@
 # 5th
 - organize repo ✅
 - abstract editable files into configs
-- ainb file handling
+- ainb file handling ✅ (Completed by Mind)
