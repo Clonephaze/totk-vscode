@@ -24,19 +24,8 @@
     "workspaceContains:**/*.sarc",
     "workspaceContains:**/*.genvb",
     "onFileSystem:sarc",
-    "onCommand:totk-editor.openPack",
-    "onCommand:totk-editor.setupPython",
-    "onCommand:totk-editor.pickPython",
-    "onCommand:totk-editor.browsePython",
     "onFileSystem:totk-disk",
-    "onCommand:totk-editor.openEditableFile",
-    "onCommand:totk-editor.refreshArchives",
-    "onCommand:totk-editor.addWorkspaceToArchives",
-    "onView:totk-editor.archives",
-    "onFileSystem:totk-dump",
-    "onCommand:totk-editor.refreshGameDump",
-    "onCommand:totk-editor.addDumpToProject",
-    "onView:totk-editor.gameDump"
+    "onFileSystem:totk-dump"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -267,6 +256,10 @@
         "title": "Export..."
       },
       {
+        "command": "totk-editor.exportYaml",
+        "title": "TOTK: Export Current File to YAML"
+      },
+      {
         "command": "totk-editor.openEditableFile",
         "title": "TOTK: Open File (BYML, AAMP, MSBT, ASB, BAEV, belnk, bslnk)"
       },
@@ -477,11 +470,6 @@
           },
           "default": [],
           "markdownDescription": "Additional file extensions (without dot) treated as **AAMP** parameter files, e.g. `bcustom`. See `aamp-extensions.json` in the extension folder for the built-in list."
-        },
-        "totk-editor.xlinkToolPath": {
-          "type": "string",
-          "default": "",
-          "markdownDescription": "Optional path to [xlink_tool](https://github.com/dt-12345/xlink2) for `.belnk` / `.bslnk` (XLNK) conversion. Windows builds bundle `vendor/xlink2/xlink_tool.exe`; leave empty to use that default."
         }
       }
     },

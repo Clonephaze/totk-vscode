@@ -1,4 +1,4 @@
-import { execFileSync } from 'child_process';
+import { execFile, execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -19,6 +19,39 @@ export function runBridge(
     });
 }
 
+export function runBridgeAsync(
+    pythonExecutable: string,
+    bridgePath: string,
+    args: string[],
+    stdin?: string,
+    env?: NodeJS.ProcessEnv,
+): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const child = execFile(
+            pythonExecutable,
+            [bridgePath, ...args],
+            {
+                encoding: 'utf-8',
+                maxBuffer: MAX_BUFFER,
+                env: env ? { ...process.env, ...env } : process.env,
+                cwd: path.dirname(bridgePath),
+            },
+            (error, stdout) => {
+                if (error) {
+                    reject(error);
+                    return;
+                }
+                resolve(stdout);
+            },
+        );
+
+        if (stdin !== undefined) {
+            child.stdin?.write(stdin);
+            child.stdin?.end();
+        }
+    });
+}
+
 export function runBridgeJson<T>(
     pythonExecutable: string,
     bridgePath: string,
@@ -27,6 +60,21 @@ export function runBridgeJson<T>(
     env?: NodeJS.ProcessEnv,
 ): T {
     const output = runBridge(pythonExecutable, bridgePath, args, stdin, env);
+    const result = JSON.parse(output) as T & { error?: string };
+    if (result && typeof result === 'object' && 'error' in result && result.error) {
+        throw new Error(result.error);
+    }
+    return result;
+}
+
+export async function runBridgeJsonAsync<T>(
+    pythonExecutable: string,
+    bridgePath: string,
+    args: string[],
+    stdin?: string,
+    env?: NodeJS.ProcessEnv,
+): Promise<T> {
+    const output = await runBridgeAsync(pythonExecutable, bridgePath, args, stdin, env);
     const result = JSON.parse(output) as T & { error?: string };
     if (result && typeof result === 'object' && 'error' in result && result.error) {
         throw new Error(result.error);
@@ -103,6 +151,15 @@ export function runBridgeRead(
     return runBridgeJson<BridgeReadResult>(pythonExecutable, bridgePath, args, undefined, env);
 }
 
+export async function runBridgeReadAsync(
+    pythonExecutable: string,
+    bridgePath: string,
+    args: string[],
+    env?: NodeJS.ProcessEnv,
+): Promise<BridgeReadResult> {
+    return runBridgeJsonAsync<BridgeReadResult>(pythonExecutable, bridgePath, args, undefined, env);
+}
+
 /** Read editable file text from the bridge (supports spill files for large XLNK YAML). */
 export function runBridgeReadContent(
     pythonExecutable: string,
@@ -117,6 +174,34 @@ export function runBridgeReadContent(
         } finally {
             try {
                 fs.unlinkSync(result.contentPath);
+            } catch {
+                /* best-effort cleanup */
+            }
+        }
+    }
+    return result.content ?? '';
+}
+
+/** Async version of runBridgeReadContent. */
+export async function runBridgeReadContentAsync(
+    pythonExecutable: string,
+    bridgePath: string,
+    args: string[],
+    env?: NodeJS.ProcessEnv,
+): Promise<string> {
+    const result = await runBridgeJsonAsync<BridgeReadPayload>(
+        pythonExecutable,
+        bridgePath,
+        args,
+        undefined,
+        env,
+    );
+    if (result.contentPath) {
+        try {
+            return await fs.promises.readFile(result.contentPath, 'utf-8');
+        } finally {
+            try {
+                await fs.promises.unlink(result.contentPath);
             } catch {
                 /* best-effort cleanup */
             }

@@ -2,7 +2,13 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { Buffer } from 'buffer';
-import { isBntxTextureResult, runBridgeJson, runBridgeRead, runBridgeReadContent } from './bridge';
+import {
+    isBntxTextureResult,
+    runBridgeJson,
+    runBridgeJsonAsync,
+    runBridgeReadAsync,
+    runBridgeReadContentAsync,
+} from './bridge';
 import { openTextureViewer } from './textureViewer';
 import {
     ensurePythonEnvironment,
@@ -75,12 +81,10 @@ function getBridgeEnv(): NodeJS.ProcessEnv {
     const config = vscode.workspace.getConfiguration('totk-editor');
     const romfsPath = resolveRomfsPath();
     const extraAamp = config.get<string[]>('extraAampExtensions', []);
-    const xlinkTool = config.get<string>('xlinkToolPath', '').trim();
     return {
         ...process.env,
         TOTK_EDITOR_ROMFS: romfsPath,
         TOTK_EXTRA_AAMP_EXTS: extraAamp.map((ext) => ext.replace(/^\./, '')).join(','),
-        ...(xlinkTool ? { TOTK_XLINK_TOOL: xlinkTool } : {}),
     };
 }
 
@@ -148,12 +152,12 @@ class SarcProvider implements vscode.FileSystemProvider {
         return locator ? `${locator.replace(/\\/g, '/')}/` : '';
     }
 
-    private loadArchiveListing(diskArchive: string, locator: string): string[] {
+    private async loadArchiveListing(diskArchive: string, locator: string): Promise<string[]> {
         const cacheKey = archiveCacheKey(diskArchive, locator);
         let files = this.fileCache.get(cacheKey);
         if (!files) {
             console.log(`Loading archive: ${diskArchive} @ ${locator || '(root)'}`);
-            files = runBridgeJson<string[]>(
+            files = await runBridgeJsonAsync<string[]>(
                 this.requirePython(),
                 this.bridgePath,
                 ['list', diskArchive, locator],
@@ -184,7 +188,7 @@ class SarcProvider implements vscode.FileSystemProvider {
         return undefined;
     }
 
-    private entryTypeForLocator(diskArchive: string, locator: string): vscode.FileType | undefined {
+    private async entryTypeForLocator(diskArchive: string, locator: string): Promise<vscode.FileType | undefined> {
         if (!locator) {
             return vscode.FileType.Directory;
         }
@@ -198,7 +202,7 @@ class SarcProvider implements vscode.FileSystemProvider {
         const parentLocator = normalized.includes('/')
             ? normalized.replace(/\/[^/]+$/, '')
             : '';
-        const files = this.loadArchiveListing(diskArchive, parentLocator);
+        const files = await this.loadArchiveListing(diskArchive, parentLocator);
         return this.entryTypeInListing(files, this.listingPrefix(parentLocator), name);
     }
 
@@ -259,7 +263,7 @@ class SarcProvider implements vscode.FileSystemProvider {
         };
     }
 
-    stat(uri: vscode.Uri): vscode.FileStat {
+    async stat(uri: vscode.Uri): Promise<vscode.FileStat> {
         const fsPath = uri.fsPath;
 
         if (!this.usesArchiveListing(fsPath)) {
@@ -268,7 +272,7 @@ class SarcProvider implements vscode.FileSystemProvider {
 
         const diskArchive = this.getDiskArchive(fsPath);
         const locator = this.getLocator(fsPath, diskArchive);
-        const entryType = this.entryTypeForLocator(diskArchive, locator);
+        const entryType = await this.entryTypeForLocator(diskArchive, locator);
         if (entryType === vscode.FileType.Directory) {
             return { type: entryType, ctime: 0, mtime: 0, size: 0 };
         }
@@ -279,7 +283,7 @@ class SarcProvider implements vscode.FileSystemProvider {
         throw vscode.FileSystemError.FileNotFound(fsPath);
     }
 
-    readDirectory(uri: vscode.Uri): [string, vscode.FileType][] {
+    async readDirectory(uri: vscode.Uri): Promise<[string, vscode.FileType][]> {
         const fsPath = uri.fsPath;
 
         if (!this.usesArchiveListing(fsPath)) {
@@ -288,7 +292,7 @@ class SarcProvider implements vscode.FileSystemProvider {
 
         const diskArchive = this.getDiskArchive(fsPath);
         const locator = this.getLocator(fsPath, diskArchive);
-        const files = this.loadArchiveListing(diskArchive, locator);
+        const files = await this.loadArchiveListing(diskArchive, locator);
 
         const result = new Map<string, vscode.FileType>();
         const prefix = this.listingPrefix(locator);
@@ -312,13 +316,13 @@ class SarcProvider implements vscode.FileSystemProvider {
         return Array.from(result.entries());
     }
 
-    readFile(uri: vscode.Uri): Uint8Array {
+    async readFile(uri: vscode.Uri): Promise<Uint8Array> {
         const fsPath = uri.fsPath;
 
         if (!this.usesArchiveListing(fsPath)) {
             if (isEditableFile(fsPath)) {
                 try {
-                    const content = runBridgeReadContent(
+                    const content = await runBridgeReadContentAsync(
                         this.requirePython(),
                         this.bridgePath,
                         ['read-disk', fsPath],
@@ -348,7 +352,7 @@ class SarcProvider implements vscode.FileSystemProvider {
 
         try {
             console.log(`Reading: ${diskArchive} / ${filePath}`);
-            const content = runBridgeReadContent(
+            const content = await runBridgeReadContentAsync(
                 this.requirePython(),
                 this.bridgePath,
                 ['read', diskArchive, filePath],
@@ -396,7 +400,7 @@ class SarcProvider implements vscode.FileSystemProvider {
         );
     }
 
-    writeFile(uri: vscode.Uri, content: Uint8Array, options: { create: boolean; overwrite: boolean }): void {
+    async writeFile(uri: vscode.Uri, content: Uint8Array, options: { create: boolean; overwrite: boolean }): Promise<void> {
         const fsPath = uri.fsPath;
 
         if (this.isMutatableDiskPath(fsPath)) {
@@ -407,7 +411,7 @@ class SarcProvider implements vscode.FileSystemProvider {
                 }
                 try {
                     const text = new TextDecoder().decode(content);
-                    runBridgeJson<{ success: boolean }>(
+                    await runBridgeJsonAsync<{ success: boolean }>(
                         this.requirePython(),
                         this.bridgePath,
                         ['write-disk', fsPath],
@@ -432,7 +436,7 @@ class SarcProvider implements vscode.FileSystemProvider {
             console.log(`Writing back to: ${diskArchive} / ${filePath}`);
             if (isEditableFile(fsPath) && content.length > 0 && !isLikelyBinaryBuffer(content)) {
                 const yamlContent = new TextDecoder().decode(content);
-                runBridgeJson<{ success: boolean }>(
+                await runBridgeJsonAsync<{ success: boolean }>(
                     this.requirePython(),
                     this.bridgePath,
                     ['write', diskArchive, filePath],
@@ -441,7 +445,7 @@ class SarcProvider implements vscode.FileSystemProvider {
                 );
             } else {
                 const encoded = Buffer.from(content).toString('base64');
-                runBridgeJson<{ success: boolean }>(
+                await runBridgeJsonAsync<{ success: boolean }>(
                     this.requirePython(),
                     this.bridgePath,
                     ['write-raw', diskArchive, filePath],
@@ -463,7 +467,7 @@ class SarcProvider implements vscode.FileSystemProvider {
         }
     }
 
-    delete(uri: vscode.Uri, options: { recursive: boolean }): void {
+    async delete(uri: vscode.Uri, options: { recursive: boolean }): Promise<void> {
         const fsPath = uri.fsPath;
         if (this.isMutatableDiskPath(fsPath)) {
             deleteDiskPath(fsPath, options.recursive);
@@ -473,7 +477,7 @@ class SarcProvider implements vscode.FileSystemProvider {
 
         const diskArchive = this.getDiskArchive(fsPath);
         const filePath = this.getLocator(fsPath, diskArchive);
-        runBridgeJson<{ success: boolean }>(
+        await runBridgeJsonAsync<{ success: boolean }>(
             this.requirePython(),
             this.bridgePath,
             ['delete-entry', diskArchive, filePath],
@@ -488,7 +492,7 @@ class SarcProvider implements vscode.FileSystemProvider {
         this.notifyChanged(uri, vscode.FileChangeType.Deleted);
     }
 
-    rename(oldUri: vscode.Uri, newUri: vscode.Uri, options: { overwrite: boolean }): void {
+    async rename(oldUri: vscode.Uri, newUri: vscode.Uri, options: { overwrite: boolean }): Promise<void> {
         const oldPath = oldUri.fsPath;
         const newPath = newUri.fsPath;
         if (this.isMutatableDiskPath(oldPath) && this.isMutatableDiskPath(newPath)) {
@@ -505,7 +509,7 @@ class SarcProvider implements vscode.FileSystemProvider {
         }
         const oldLocator = this.getLocator(oldPath, oldDiskArchive);
         const newLocator = this.getLocator(newPath, newDiskArchive);
-        runBridgeJson<{ success: boolean }>(
+        await runBridgeJsonAsync<{ success: boolean }>(
             this.requirePython(),
             this.bridgePath,
             ['rename-entry', oldDiskArchive, oldLocator, newLocator],
@@ -554,7 +558,7 @@ export async function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('totk-editor.openBntxTexture', (uri: vscode.Uri) => {
+        vscode.commands.registerCommand('totk-editor.openBntxTexture', async (uri: vscode.Uri) => {
             const python = getPython();
             if (!python) {
                 void vscode.window.showErrorMessage('Python not configured.');
@@ -563,7 +567,12 @@ export async function activate(context: vscode.ExtensionContext) {
             try {
                 const diskArchive = getDiskArchivePath(uri.fsPath);
                 const filePath = getLocatorInsideDiskArchive(uri.fsPath, diskArchive);
-                const raw = runBridgeRead(python, bridgePath, ['read', diskArchive, filePath], getBridgeEnv());
+                const raw = await runBridgeReadAsync(
+                    python,
+                    bridgePath,
+                    ['read', diskArchive, filePath],
+                    getBridgeEnv(),
+                );
                 if (isBntxTextureResult(raw)) {
                     const texName = raw.metadata?.name ?? filePath.split('/').pop() ?? 'texture';
                     openTextureViewer(texName, raw);
@@ -640,10 +649,12 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('totk-editor.browsePython', () => browseForPython(context)),
     );
 
-    const python = await ensurePythonEnvironment(context);
-    if (!python) {
-        await promptPythonSetup(context);
-    }
+    // Start Python bootstrap in background so activation doesn't block the extension host.
+    void ensurePythonEnvironment(context).then(async (python) => {
+        if (!python) {
+            await promptPythonSetup(context);
+        }
+    });
 
     await migrateOffStandaloneIconTheme(context);
     registerIconThemeCommands(context);
@@ -743,6 +754,25 @@ export async function activate(context: vscode.ExtensionContext) {
             },
         ),
     );
+
+    const exportYaml = vscode.commands.registerCommand('totk-editor.exportYaml', async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            void vscode.window.showWarningMessage('No active editor to export.');
+            return;
+        }
+        const text = editor.document.getText();
+        const baseName = editor.document.uri.path.split('/').pop() ?? 'export';
+        const dest = await vscode.window.showSaveDialog({
+            defaultUri: vscode.Uri.file(baseName + '.yaml'),
+            filters: { 'YAML': ['yaml', 'yml'] },
+        });
+        if (dest) {
+            await vscode.workspace.fs.writeFile(dest, Buffer.from(text, 'utf-8'));
+            void vscode.window.showInformationMessage(`Exported to ${dest.fsPath}`);
+        }
+    });
+    context.subscriptions.push(exportYaml);
 
     const openEditableFile = vscode.commands.registerCommand('totk-editor.openEditableFile', async () => {
         const aampFilterExtensions = [...getAampExtensions()];

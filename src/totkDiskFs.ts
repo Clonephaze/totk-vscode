@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { runBridgeJson, runBridgeReadContent } from './bridge';
+import { runBridgeJsonAsync, runBridgeReadContentAsync } from './bridge';
 import { isArchiveFile } from './archives';
 import { createDiskDirectory, deleteDiskPath, renameDiskPath } from './diskFsOps';
 import { isEditableFile } from './editableFiles';
@@ -63,7 +63,7 @@ export class TotkDiskFileSystemProvider implements vscode.FileSystemProvider {
         });
     }
 
-    readFile(uri: vscode.Uri): Uint8Array {
+    async readFile(uri: vscode.Uri): Promise<Uint8Array> {
         const diskPath = uri.fsPath;
 
         if (!isEditableFile(diskPath)) {
@@ -71,7 +71,7 @@ export class TotkDiskFileSystemProvider implements vscode.FileSystemProvider {
         }
 
         try {
-            const content = runBridgeReadContent(
+            const content = await runBridgeReadContentAsync(
                 this.requirePython(),
                 this.bridgePath,
                 ['read-disk', diskPath],
@@ -84,7 +84,7 @@ export class TotkDiskFileSystemProvider implements vscode.FileSystemProvider {
         }
     }
 
-    writeFile(uri: vscode.Uri, content: Uint8Array): void {
+    async writeFile(uri: vscode.Uri, content: Uint8Array): Promise<void> {
         const diskPath = uri.fsPath;
         const text = new TextDecoder().decode(content);
 
@@ -99,7 +99,7 @@ export class TotkDiskFileSystemProvider implements vscode.FileSystemProvider {
         }
 
         try {
-            runBridgeJson<{ success: boolean }>(
+            await runBridgeJsonAsync<{ success: boolean }>(
                 this.requirePython(),
                 this.bridgePath,
                 ['write-disk', diskPath],

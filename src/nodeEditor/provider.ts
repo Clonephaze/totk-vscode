@@ -4,13 +4,12 @@ import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import * as util from 'util';
 import { NodeEditorAdapterRegistry } from './registry';
+import { getCachedPythonExecutable } from '../pythonEnv';
 
 const execPromise = util.promisify(cp.exec);
 
-// --- Python RPC Helpers ---
-// Grabs the workspace's configured Python, or defaults to system 'python'
-function getCachedPythonExecutable(): string {
-    return vscode.workspace.getConfiguration('python').get<string>('defaultInterpreterPath') || 'python';
+function getPython(): string {
+    return getCachedPythonExecutable() ?? 'python';
 }
 
 async function runBridgeJson(extensionPath: string, pythonExe: string, args: string[]): Promise<any> {
@@ -90,7 +89,7 @@ public async resolveCustomTextEditor(
                     const commandString = JSON.stringify({ action: "to_json" });
                     const result = await runBridgeJson(
                         this.context.extensionPath,
-                        getCachedPythonExecutable(), [
+                        getPython(), [
                         'ainb_rpc.py',
                         '--file', filePath, 
                         '--command', commandString
@@ -135,7 +134,7 @@ public async resolveCustomTextEditor(
                         
                         const result = await runBridgeJson(
                             this.context.extensionPath,
-                            getCachedPythonExecutable(), 
+                            getPython(),
                             ['ainb_rpc.py', '--file', document.uri.fsPath, '--command', commandString]
                         );
 

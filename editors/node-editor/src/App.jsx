@@ -6,7 +6,6 @@ import {
   applyNodeChanges, useViewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { addEdge } from '@xyflow/react';
 import { useOnSelectionChange } from '@xyflow/react';
 
 const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : undefined;
@@ -349,10 +348,6 @@ function FlowInner({ model }) {
 
   // 1. Handle Wire Connections
   const onConnect = useCallback((connection) => {
-    // Optimistically update UI so the wire appears instantly
-    setNodes((nds) => addEdge(connection, nds));
-
-    // Send the command to Python to actually save it
     vscode?.postMessage({
       type: 'rpc_edit',
       payload: {
