@@ -24,8 +24,8 @@ def zsdic_pack_path(romfs_path: str) -> str:
 def _ensure_vendor_zstd() -> None:
     script_dir = Path(__file__).resolve().parent
     candidates = [
-        script_dir / 'vendor' / 'asb-toolkit',
-        script_dir.parent / 'vendor' / 'asb-toolkit',
+        script_dir / 'vendor' / 'asb',
+        script_dir.parent / 'vendor' / 'asb',
     ]
     for vendor in candidates:
         vendor_str = str(vendor)
