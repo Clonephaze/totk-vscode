@@ -13,8 +13,8 @@ import zstandard as zstd
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
 _ASB_TOOLKIT_DIRS = [
-    _SCRIPT_DIR / 'vendor' / 'asb-toolkit',
-    _SCRIPT_DIR.parent / 'vendor' / 'asb-toolkit',
+    _SCRIPT_DIR / 'vendor' / 'asb',
+    _SCRIPT_DIR.parent / 'vendor' / 'asb',
 ]
 
 
