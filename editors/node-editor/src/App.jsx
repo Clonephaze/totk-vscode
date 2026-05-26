@@ -49,8 +49,16 @@ function pinColorFromSemanticKey(key) {
   return `hsl(${hue}, 58%, 70%)`;
 }
 
+// Module-level cache — pin IDs are static strings, so this never needs
+// clearing. Eliminates the hash loop + regex on every node render.
+const _pinColorCache = new Map();
 function pinColor(handleId) {
-  return pinColorFromSemanticKey(pinSemanticKey(handleId));
+  let color = _pinColorCache.get(handleId);
+  if (color === undefined) {
+    color = pinColorFromSemanticKey(pinSemanticKey(handleId));
+    _pinColorCache.set(handleId, color);
+  }
+  return color;
 }
 
 // ---------------------------------------------------------------------------
@@ -106,8 +114,9 @@ const GradientEdge = memo(function GradientEdge({
   const [edgePath] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
   const gradId = `eg-${id}`;
 
-  const srcRgb = parseColor(data?.srcColor ?? 'hsl(42,85%,68%)');
-  const tgtRgb = parseColor(data?.tgtColor ?? 'hsl(42,85%,68%)');
+  // srcRgb/tgtRgb are pre-parsed in buildEdgeData — no color work on render.
+  const srcRgb = data?.srcRgb ?? [255, 196, 87];
+  const tgtRgb = data?.tgtRgb ?? [255, 196, 87];
   const midRgb = lerpRgb(srcRgb, tgtRgb, 0.5);
   const alpha  = selected ? 0.92 : 0.5;
   const width  = selected ? 2.7  : 1.35;
@@ -229,7 +238,6 @@ const AinbNodeLod = memo(function AinbNodeLod({ data }) {
 // ---------------------------------------------------------------------------
 // Module-level stable constants
 // ---------------------------------------------------------------------------
-// Zoom threshold below which nodes render as cheap LOD cards.
 const NODE_LOD_ZOOM = 0.18;
 
 const NODE_TYPES_FULL = { ainb: AinbNodeCard };
@@ -238,41 +246,121 @@ const edgeTypes         = { gradient: GradientEdge };
 const DEFAULT_EDGE_OPTS = { type: 'gradient' };
 const FIT_VIEW_OPTS     = { padding: 0.18 };
 
-// Build edge gradient data. Source and target colors use the same semantic-key
-// logic as the pin balls, so wires connecting matching param types are uniform
-// and cross-type wires have a visible lerp.
 function buildEdgeData(edge) {
+  // Parse RGB once here so GradientEdge never calls parseColor on render.
+  const srcColor = pinColor(edge.sourceHandle);
+  const tgtColor = pinColor(edge.targetHandle);
   return {
-    srcColor: pinColor(edge.sourceHandle),
-    tgtColor: pinColor(edge.targetHandle),
+    srcColor,
+    tgtColor,
+    srcRgb: parseColor(srcColor),
+    tgtRgb: parseColor(tgtColor),
   };
 }
 
 // ---------------------------------------------------------------------------
-// FlowInner — owns ReactFlow state
+// Spatial grid — world-space bucketing for frustum culling
+//
+// The canvas layout uses columnGap=520, rowGap=34, nodes ~220-340px wide,
+// height varies. 1500 nodes across ~30 depth columns → up to ~15k × ~50k
+// world units worst case.
+//
+// Strategy:
+//   - Divide world into CELL_SIZE × CELL_SIZE cells
+//   - Each node is bucketed into the cell containing its position
+//   - On viewport change, compute the world-space AABB of the screen,
+//     expand by CELL_PAD cells, collect all intersecting cell keys
+//   - Visible nodes = nodes in visible cells
+//   - Visible edges = edges where source OR target node is visible
+//     (catches long cross-graph connections without AABB math per edge)
+// ---------------------------------------------------------------------------
+const CELL_SIZE = 3000;   // world units per cell side
+const CELL_PAD  = 1;      // extra cells of margin to prevent pop-in
+
+// Integer cell key — Map/Set lookups on integers are faster than strings in V8.
+// Multiplier is a large prime; coords realistically stay well within ±100 000.
+function cellKey(cx, cy) { return cx * 1_000_003 + cy; }
+
+function nodeToCell(x, y) {
+  return [Math.floor(x / CELL_SIZE), Math.floor(y / CELL_SIZE)];
+}
+
+// Build grid: Map<cellKey, Set<nodeId>>  +  Map<nodeId, cellKey>
+function buildSpatialGrid(rfNodes) {
+  const grid    = new Map(); // cellKey → Set<rfNode>
+  const nodeCell = new Map(); // nodeId  → cellKey
+  for (const n of rfNodes) {
+    const [cx, cy] = nodeToCell(n.position.x, n.position.y);
+    const key = cellKey(cx, cy);
+    if (!grid.has(key)) grid.set(key, new Set());
+    grid.get(key).add(n.id);
+    nodeCell.set(n.id, key);
+  }
+  return { grid, nodeCell };
+}
+
+// Given ReactFlow viewport {x, y, zoom} and container size {w, h},
+// return Set<cellKey> of all cells that intersect the visible world AABB.
+function visibleCellKeys(viewport, w, h) {
+  // ReactFlow viewport: world origin is at (vx, vy) in screen space.
+  // screen point (sx, sy) → world = ((sx - vx) / zoom, (sy - vy) / zoom)
+  const { x: vx, y: vy, zoom } = viewport;
+  const wxMin = (0    - vx) / zoom;
+  const wyMin = (0    - vy) / zoom;
+  const wxMax = (w    - vx) / zoom;
+  const wyMax = (h    - vy) / zoom;
+
+  const cxMin = Math.floor(wxMin / CELL_SIZE) - CELL_PAD;
+  const cyMin = Math.floor(wyMin / CELL_SIZE) - CELL_PAD;
+  const cxMax = Math.floor(wxMax / CELL_SIZE) + CELL_PAD;
+  const cyMax = Math.floor(wyMax / CELL_SIZE) + CELL_PAD;
+
+  const keys = new Set();
+  for (let cx = cxMin; cx <= cxMax; cx++) {
+    for (let cy = cyMin; cy <= cyMax; cy++) {
+      keys.add(cellKey(cx, cy));
+    }
+  }
+  return keys;
+}
+
+// ---------------------------------------------------------------------------
+// FlowInner — owns ReactFlow state + incremental spatial culling
 // ---------------------------------------------------------------------------
 function FlowInner({ model }) {
   const selectedEdgeIdRef = useRef('');
   const [selectedEdgeId, setSelectedEdgeId] = useState('');
+  const containerRef = useRef(null);
+  const [containerSize, setContainerSize] = useState({ w: 1920, h: 1080 });
 
-  // Switch between full and LOD node renderers based on viewport zoom.
-  // Memoize on the boolean crossing so nodeTypes identity is stable
-  // between zoom events that don't cross the threshold.
-  const { zoom } = useViewport();
+  // Track container size for accurate frustum AABB
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setContainerSize({ w: width, h: height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const viewport = useViewport();
+  const { zoom } = viewport;
+
+  const isFullDetail = zoom >= NODE_LOD_ZOOM;
   const nodeTypes = useMemo(
-    () => (zoom >= NODE_LOD_ZOOM ? NODE_TYPES_FULL : NODE_TYPES_LOD),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [zoom >= NODE_LOD_ZOOM],
+    () => (isFullDetail ? NODE_TYPES_FULL : NODE_TYPES_LOD),
+    [isFullDetail],
   );
 
-  // ---- Nodes ---------------------------------------------------------------
-  // ReactFlow must own node positions so drags write back into state.
-  const initialNodes = useMemo(() => {
+  // ---- All nodes (full set, owned by ReactFlow for drag state) -------------
+  const allRfNodes = useMemo(() => {
     if (!model?.nodes) return [];
     return model.nodes.map((node) => ({
-      id:   String(node.id),
+      id:       String(node.id),
       position: { x: node.x, y: node.y },
-      type: 'ainb',
+      type:     'ainb',
       data: {
         nodeId:     node.id,
         label:      node.label,
@@ -289,16 +377,80 @@ function FlowInner({ model }) {
   }, [model]);
 
   const [nodes, setNodes] = useState([]);
-  useEffect(() => { setNodes(initialNodes); }, [initialNodes]);
-  const onNodesChange = useCallback(
-    (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
-    [],
+  useEffect(() => { setNodes(allRfNodes); }, [allRfNodes]);
+
+  // ---- Spatial grid — ref so patches don't trigger re-renders --------------
+  // gridRef.current = { grid: Map<cellKey, Set<nodeId>>, nodeCell: Map<nodeId, cellKey> }
+  // gridVersion increments only when a node crosses a cell boundary, which is
+  // what the cull memos depend on — not every pixel of drag.
+  const gridRef = useRef({ grid: new Map(), nodeCell: new Map() });
+  const [gridVersion, setGridVersion] = useState(0);
+
+  // Full rebuild when model loads (allRfNodes identity changes)
+  useEffect(() => {
+    gridRef.current = buildSpatialGrid(allRfNodes);
+    setGridVersion((v) => v + 1);
+  }, [allRfNodes]);
+
+  // Incremental patch on drag — only touches moved nodes, only bumps version
+  // when a node actually crosses into a new cell.
+  const onNodesChange = useCallback((changes) => {
+    setNodes((nds) => {
+      const updated = applyNodeChanges(changes, nds);
+      const { grid, nodeCell } = gridRef.current;
+      let cellCrossed = false;
+      for (const change of changes) {
+        if (change.type !== 'position' || !change.position) continue;
+        const { x, y } = change.position;
+        const oldKey = nodeCell.get(change.id);
+        const [cx, cy] = nodeToCell(x, y);
+        const newKey = cellKey(cx, cy);
+        if (newKey === oldKey) continue; // same cell — no work needed
+        // Remove from old cell
+        if (oldKey !== undefined) {
+          const oldSet = grid.get(oldKey);
+          if (oldSet) {
+            oldSet.delete(change.id);
+            if (oldSet.size === 0) grid.delete(oldKey);
+          }
+        }
+        // Insert into new cell
+        if (!grid.has(newKey)) grid.set(newKey, new Set());
+        grid.get(newKey).add(change.id);
+        nodeCell.set(change.id, newKey);
+        cellCrossed = true;
+      }
+      if (cellCrossed) setGridVersion((v) => v + 1);
+      return updated;
+    });
+  }, []);
+
+  // ---- Visible cell keys — recomputed on viewport/size change --------------
+  const visCells = useMemo(
+    () => visibleCellKeys(viewport, containerSize.w, containerSize.h),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [viewport.x, viewport.y, viewport.zoom, containerSize.w, containerSize.h],
   );
 
-  // ---- Edges ---------------------------------------------------------------
-  // baseEdges only rebuilds when model changes.
-  // Selection is layered on top in a separate cheap memo.
-  const baseEdges = useMemo(() => {
+  // ---- Cull nodes via hidden prop — NOT by filtering the array --------------
+  // ReactFlow must receive every node to resolve handle positions for edges.
+  // Filtering the array breaks connections to off-screen nodes (known RF bug).
+  // Instead, set hidden:true on off-screen nodes — RF skips their DOM subtree
+  // but keeps them in its internal store so edge anchoring still works.
+  const culledNodes = useMemo(() => {
+    if (nodes.length === 0) return nodes;
+    const { nodeCell } = gridRef.current;
+    return nodes.map((n) => {
+      const inView = visCells.has(nodeCell.get(n.id));
+      // Keep object identity when nothing changed — avoids unnecessary RF re-renders
+      if (n.hidden === !inView) return n;
+      return { ...n, hidden: !inView };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes, gridVersion, visCells]);
+
+  // ---- All edges (base, never culled source-of-truth) ----------------------
+  const allBaseEdges = useMemo(() => {
     if (!model?.edges) return [];
     return model.edges.map((edge) => ({
       id:           edge.id,
@@ -313,14 +465,16 @@ function FlowInner({ model }) {
     }));
   }, [model]);
 
-  const edges = useMemo(() => {
-    if (!selectedEdgeId) return baseEdges;
-    return baseEdges.map((edge) => {
-      const sel = edge.id === selectedEdgeId;
-      if (!sel && !edge.selected) return edge;
-      return { ...edge, selected: sel, zIndex: sel ? 6 : 0 };
+  // ---- Edges — no culling, just selection state layered on top ------------
+  // Edges are SVG <path> elements and are cheap at any count.
+  // Culling them causes broken/missing connections with no meaningful perf gain.
+  const visibleEdges = useMemo(() => {
+    if (!selectedEdgeId) return allBaseEdges;
+    return allBaseEdges.map((edge) => {
+      if (edge.id !== selectedEdgeId) return edge;
+      return { ...edge, selected: true, zIndex: 6 };
     });
-  }, [baseEdges, selectedEdgeId]);
+  }, [allBaseEdges, selectedEdgeId]);
 
   // ---- Handlers ------------------------------------------------------------
   const onEdgeClick = useCallback((_evt, edge) => {
@@ -336,40 +490,39 @@ function FlowInner({ model }) {
   }, []);
 
   return (
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      nodeTypes={nodeTypes}
-      edgeTypes={edgeTypes}
-      defaultEdgeOptions={DEFAULT_EDGE_OPTS}
-      onNodesChange={onNodesChange}
-      onEdgeClick={onEdgeClick}
-      onPaneClick={onPaneClick}
+    <div ref={containerRef} style={{ flex: 1, minHeight: 0 }}>
+      <ReactFlow
+        nodes={culledNodes}
+        edges={visibleEdges}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        defaultEdgeOptions={DEFAULT_EDGE_OPTS}
+        onNodesChange={onNodesChange}
+        onEdgeClick={onEdgeClick}
+        onPaneClick={onPaneClick}
 
-      // Interaction
-      nodesDraggable={true}
-      nodesConnectable={false}
-      elementsSelectable={true}
-      zoomOnDoubleClick={false}
-      panOnDrag={[1, 2]}        // middle + right mouse pan; left is for node drag
-      panOnScroll={false}
-      zoomOnScroll={true}
-      selectionOnDrag={false}
+        nodesDraggable={true}
+        nodesConnectable={false}
+        elementsSelectable={true}
+        zoomOnDoubleClick={false}
+        panOnDrag={[1, 2]}
+        panOnScroll={false}
+        zoomOnScroll={true}
+        selectionOnDrag={false}
 
-      // Zoom range — minZoom 0.01 lets you zoom out to see all 800 nodes
-      minZoom={0.01}
-      maxZoom={4}
+        minZoom={0.01}
+        maxZoom={4}
 
-      // Only render nodes/edges in the viewport — critical for 800-node perf
-      onlyRenderVisibleElements={true}
+        elevateEdgesOnSelect={true}
 
-      fitView
-      fitViewOptions={FIT_VIEW_OPTS}
-    >
-      <MiniMap pannable zoomable />
-      <Controls />
-      <Background gap={18} size={1} />
-    </ReactFlow>
+        fitView
+        fitViewOptions={FIT_VIEW_OPTS}
+      >
+        <MiniMap pannable zoomable />
+        <Controls />
+        <Background gap={18} size={1} />
+      </ReactFlow>
+    </div>
   );
 }
 
@@ -406,9 +559,10 @@ export default function App() {
       </div>
       {!model && !error && <div style={{ padding: 12 }}>Loading AINB graph…</div>}
       {error && <div style={{ padding: 12, color: '#d33' }}>{error}</div>}
-      <ReactFlowProvider>
+      <ReactFlowProvider style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <FlowInner model={model} />
       </ReactFlowProvider>
+
     </div>
   );
 }
