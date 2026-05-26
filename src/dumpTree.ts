@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { addDumpEntryToProject, pickProjectRoot } from './addToProject';
-import { isArchiveFile, isBntxTextureUri, isPathInsideArchive } from './archives';
+import { isArchiveFile, isBntxTextureUri, isPathInsideArchive, isTxtgFile } from './archives';
 import type { ArchiveTreeProvider } from './archiveTree';
 import { resolveRomfsPath } from './romfs';
 
@@ -29,14 +29,14 @@ export class DumpTreeItem extends vscode.TreeItem {
         this.contextValue = contextValue;
 
         if (collapsibleState === vscode.TreeItemCollapsibleState.None) {
-            this.command = isBntxTextureUri(resourceUri)
+            this.command = (isBntxTextureUri(resourceUri) || isTxtgFile(resourceUri.fsPath))
                 ? { command: 'totk-editor.openBntxTexture', title: 'View Texture', arguments: [resourceUri] }
                 : { command: 'vscode.open', title: 'Open', arguments: [resourceUri, { preview: true }] };
         }
 
         if (isArchiveFile(entryName)) {
             this.iconPath = new vscode.ThemeIcon('package');
-        } else if (isBntxTextureUri(resourceUri) && extensionUri) {
+        } else if ((isBntxTextureUri(resourceUri) || isTxtgFile(resourceUri.fsPath)) && extensionUri) {
             this.iconPath = vscode.Uri.joinPath(extensionUri, 'icons', 'texture.svg');
         } else if (contextValue === 'dumpDir') {
             this.iconPath = new vscode.ThemeIcon('folder');

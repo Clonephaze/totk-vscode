@@ -95,6 +95,16 @@ def _read_bntx_texture_result(bntx_data: bytes, texture_name: str) -> dict:
     return result
 
 
+def _read_txtg_texture_result(file_data: bytes, texture_name: str, logical_path: str) -> dict:
+    from txtg_reader import read_txtg_texture_result
+
+    try:
+        payload, _, _ = decompress_container(file_data, logical_path, get_romfs_path())
+    except Exception:
+        payload = file_data
+    return read_txtg_texture_result(payload, texture_name)
+
+
 def export_archive_file_to_temp(archive_path: str, internal_path: str, romfs_path: str = '') -> str:
     file_data = read_archive_file_bytes(archive_path, internal_path, romfs_path)
     file_name = Path(internal_path).name or 'file.bin'
@@ -569,6 +579,18 @@ def main():
                         print(json.dumps({'path': png_path}))
                     else:
                         print(json.dumps({'error': f'Failed to render texture: {tex_name}'}))
+
+            elif command == 'render-txtg':
+                internal_path = sys.argv[3] if len(sys.argv) > 3 else ''
+                if internal_path:
+                    file_data = read_archive_file_bytes(archive_path, internal_path, romfs_path)
+                    logical_path = internal_path
+                    texture_name = Path(internal_path).name or 'texture'
+                else:
+                    file_data = Path(archive_path).read_bytes()
+                    logical_path = archive_path
+                    texture_name = Path(archive_path).name or 'texture'
+                print(json.dumps(_read_txtg_texture_result(file_data, texture_name, logical_path)))
 
             elif command == 'export-temp':
                 internal_path = sys.argv[3]

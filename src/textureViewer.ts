@@ -66,8 +66,9 @@ function buildHtml(result: BntxTextureResult, webview: vscode.Webview): string {
         ? `${channelsSection}${imageInfoSection}${miscSection}`
         : '<p style="color:#888;">No metadata available</p>';
 
+    const errorText = result.error ?? 'Rendering failed for this texture variant.';
     const errorNote = !result.pngBase64
-        ? '<p style="color:#e8a040;margin-top:12px;">Rendering failed - check the developer console for details.</p>'
+        ? `<p style="color:#e8a040;margin-top:12px;">${escapeHtml(errorText)}</p>`
         : '';
 
     return /* html */ `<!DOCTYPE html>
@@ -275,4 +276,13 @@ function formatBytes(bytes: number): string {
         return `${(bytes / 1024).toFixed(1)} KB`;
     }
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function escapeHtml(value: string): string {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }

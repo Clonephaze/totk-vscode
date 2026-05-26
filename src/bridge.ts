@@ -117,6 +117,7 @@ export interface BntxMiscInfo {
 
 export interface BntxTextureResult {
     bntxTexture: true;
+    error?: string;
     metadata?: {
         name: string;
         channels: BntxChannelInfo;

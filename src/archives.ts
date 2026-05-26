@@ -1,6 +1,7 @@
 /** SARC-based archives (.pack, .sarc, .genvb, .blarc, .bntx and optional .zs compression). */
 
 export const ARCHIVE_FILE_PATTERN = /\.(pack|sarc|genvb|blarc|bfarc|bntx)(\.zs)?$/i;
+const TXTG_FILE_PATTERN = /\.txtg(\.zs)?$/i;
 
 const BNTX_PARENT_PATTERN = /\.bntx(\.zs)?[/\\]/i;
 
@@ -17,6 +18,10 @@ export function isArchiveFileName(name: string): boolean {
 
 export function isArchiveFile(filePath: string): boolean {
     return ARCHIVE_FILE_PATTERN.test(filePath.replace(/\\/g, '/'));
+}
+
+export function isTxtgFile(filePath: string): boolean {
+    return TXTG_FILE_PATTERN.test(filePath.replace(/\\/g, '/'));
 }
 
 /** True when the path continues *inside* an archive file (virtual path). */

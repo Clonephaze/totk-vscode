@@ -30,6 +30,9 @@
     },
     "_totk_baev": {
       "iconPath": "./armature.svg"
+    },
+    "_totk_texture": {
+      "iconPath": "./texture.svg"
     }
   },
   "folderNames": {
@@ -146,7 +149,9 @@
     "bphysics": "_totk_aamp",
     "bphysics.zs": "_totk_aamp",
     "bshop": "_totk_aamp",
-    "bshop.zs": "_totk_aamp"
+    "bshop.zs": "_totk_aamp",
+    "txtg": "_totk_texture",
+    "txtg.zs": "_totk_texture"
   },
   "fileNames": {
     ".tkproj": "_totk_tkproj"

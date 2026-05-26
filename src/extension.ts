@@ -26,6 +26,7 @@ import {
     isArchiveBrowsePath,
     isArchiveFile,
     isPathInsideArchive,
+    isTxtgFile,
 } from './archives';
 import { registerDocumentLanguageModes } from './languageModes';
 import { getAampExtensions, initAampExtensions } from './aampExtensions';
@@ -568,21 +569,24 @@ export async function activate(context: vscode.ExtensionContext) {
             try {
                 const diskArchive = getDiskArchivePath(uri.fsPath);
                 const filePath = getLocatorInsideDiskArchive(uri.fsPath, diskArchive);
+                const commandArgs = isTxtgFile(uri.fsPath)
+                    ? (filePath ? ['render-txtg', diskArchive, filePath] : ['render-txtg', diskArchive])
+                    : ['read', diskArchive, filePath];
                 const raw = await runBridgeReadAsync(
                     python,
                     bridgePath,
-                    ['read', diskArchive, filePath],
+                    commandArgs,
                     getBridgeEnv(),
                 );
                 if (isBntxTextureResult(raw)) {
                     const texName = raw.metadata?.name ?? filePath.split('/').pop() ?? 'texture';
                     openTextureViewer(texName, raw);
                 } else {
-                    void vscode.window.showErrorMessage('Failed to load BNTX texture.');
+                    void vscode.window.showErrorMessage('Failed to load texture preview.');
                 }
             } catch (e) {
                 const msg = e instanceof Error ? e.message : String(e);
-                void vscode.window.showErrorMessage(`BNTX texture error: ${msg}`);
+                void vscode.window.showErrorMessage(`Texture preview error: ${msg}`);
             }
         }),
     );

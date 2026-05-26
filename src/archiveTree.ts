@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { isArchiveFile, isBntxTextureUri, isPathInsideArchive } from './archives';
+import { isArchiveFile, isBntxTextureUri, isPathInsideArchive, isTxtgFile } from './archives';
 import { registerArchiveFileCommands, ArchiveTreeDragDrop, setArchiveTreeView } from './archiveFsCommands';
 
 const STORAGE_KEY = 'totk-editor.archiveRoots';
@@ -30,13 +30,13 @@ export class ArchiveTreeItem extends vscode.TreeItem {
             this.description = path.dirname(resourceUri.fsPath);
             this.tooltip = resourceUri.fsPath;
         } else if (collapsibleState === vscode.TreeItemCollapsibleState.None) {
-            this.command = isBntxTextureUri(resourceUri)
+            this.command = (isBntxTextureUri(resourceUri) || isTxtgFile(resourceUri.fsPath))
                 ? { command: 'totk-editor.openBntxTexture', title: 'View Texture', arguments: [resourceUri] }
                 : { command: 'vscode.open', title: 'Open', arguments: [resourceUri] };
         }
         if (isArchiveFile(entryName)) {
             this.iconPath = new vscode.ThemeIcon('package');
-        } else if (isBntxTextureUri(resourceUri) && extensionUri) {
+        } else if ((isBntxTextureUri(resourceUri) || isTxtgFile(resourceUri.fsPath)) && extensionUri) {
             this.iconPath = vscode.Uri.joinPath(extensionUri, 'icons', 'texture.svg');
         } else if (isTkprojFile(entryName) && extensionUri) {
             this.iconPath = vscode.Uri.joinPath(extensionUri, 'icons', 'tkproj.svg');
