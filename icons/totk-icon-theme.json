@@ -18,6 +18,18 @@
     },
     "_totk_xlnk": {
       "iconPath": "./xlnk.svg"
+    },
+    "_totk_ainb": {
+      "iconPath": "./nodes.svg"
+    },
+    "_totk_asb": {
+      "iconPath": "./armature.svg"
+    },
+    "_totk_aamp": {
+      "iconPath": "./aamp.svg"
+    },
+    "_totk_baev": {
+      "iconPath": "./armature.svg"
     }
   },
   "folderNames": {
@@ -56,7 +68,85 @@
     "belnk": "_totk_xlnk",
     "bslnk": "_totk_xlnk",
     "belnk.zs": "_totk_xlnk",
-    "bslnk.zs": "_totk_xlnk"
+    "bslnk.zs": "_totk_xlnk",
+    "ainb": "_totk_ainb",
+    "ainb.zs": "_totk_ainb",
+    "asb": "_totk_asb",
+    "baev": "_totk_baev",
+    "aamp": "_totk_aamp",
+    "aamp.zs": "_totk_aamp",
+    "baglblm": "_totk_aamp",
+    "baglblm.zs": "_totk_aamp",
+    "baglccr": "_totk_aamp",
+    "baglccr.zs": "_totk_aamp",
+    "baglclwd": "_totk_aamp",
+    "baglclwd.zs": "_totk_aamp",
+    "baglcube": "_totk_aamp",
+    "baglcube.zs": "_totk_aamp",
+    "bagldof": "_totk_aamp",
+    "bagldof.zs": "_totk_aamp",
+    "baglenv": "_totk_aamp",
+    "baglenv.zs": "_totk_aamp",
+    "baglenvset": "_totk_aamp",
+    "baglenvset.zs": "_totk_aamp",
+    "baglfila": "_totk_aamp",
+    "baglfila.zs": "_totk_aamp",
+    "bagllmap": "_totk_aamp",
+    "bagllmap.zs": "_totk_aamp",
+    "baglmf": "_totk_aamp",
+    "baglmf.zs": "_totk_aamp",
+    "baglshpp": "_totk_aamp",
+    "baglshpp.zs": "_totk_aamp",
+    "baglsky": "_totk_aamp",
+    "baglsky.zs": "_totk_aamp",
+    "bgapkginfo": "_totk_aamp",
+    "bgapkginfo.zs": "_totk_aamp",
+    "bgapkglist": "_totk_aamp",
+    "bgapkglist.zs": "_totk_aamp",
+    "bgenv": "_totk_aamp",
+    "bgenv.zs": "_totk_aamp",
+    "bglght": "_totk_aamp",
+    "bglght.zs": "_totk_aamp",
+    "bgmsconf": "_totk_aamp",
+    "bgmsconf.zs": "_totk_aamp",
+    "bgsdw": "_totk_aamp",
+    "bgsdw.zs": "_totk_aamp",
+    "bphhb": "_totk_aamp",
+    "bphhb.zs": "_totk_aamp",
+    "bptcl": "_totk_aamp",
+    "bptcl.zs": "_totk_aamp",
+    "bptclconf": "_totk_aamp",
+    "bptclconf.zs": "_totk_aamp",
+    "baiprog": "_totk_aamp",
+    "baiprog.zs": "_totk_aamp",
+    "baischedule": "_totk_aamp",
+    "baischedule.zs": "_totk_aamp",
+    "basset": "_totk_aamp",
+    "basset.zs": "_totk_aamp",
+    "bcam": "_totk_aamp",
+    "bcam.zs": "_totk_aamp",
+    "bcamera": "_totk_aamp",
+    "bcamera.zs": "_totk_aamp",
+    "bchemical": "_totk_aamp",
+    "bchemical.zs": "_totk_aamp",
+    "bcomfort": "_totk_aamp",
+    "bcomfort.zs": "_totk_aamp",
+    "bcompound": "_totk_aamp",
+    "bcompound.zs": "_totk_aamp",
+    "bcurve": "_totk_aamp",
+    "bcurve.zs": "_totk_aamp",
+    "bdamage": "_totk_aamp",
+    "bdamage.zs": "_totk_aamp",
+    "bdmgparam": "_totk_aamp",
+    "bdmgparam.zs": "_totk_aamp",
+    "bevent": "_totk_aamp",
+    "bevent.zs": "_totk_aamp",
+    "bmodel": "_totk_aamp",
+    "bmodel.zs": "_totk_aamp",
+    "bphysics": "_totk_aamp",
+    "bphysics.zs": "_totk_aamp",
+    "bshop": "_totk_aamp",
+    "bshop.zs": "_totk_aamp"
   },
   "fileNames": {
     ".tkproj": "_totk_tkproj"
@@ -65,6 +155,7 @@
     "byml": "_totk_byml",
     "bgyml": "_totk_bgyml",
     "msbt": "_totk_msbt",
-    "totk-xlnk": "_totk_xlnk"
+    "totk-xlnk": "_totk_xlnk",
+    "ainb": "_totk_ainb"
   }
 }

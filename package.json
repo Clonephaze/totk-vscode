@@ -168,7 +168,11 @@
           "AINB",
           "ainb"
         ],
-        "configuration": "./config/language-configuration.json"
+        "configuration": "./config/language-configuration.json",
+        "icon": {
+          "light": "./icons/nodes.svg",
+          "dark": "./icons/nodes.svg"
+        }
       }
     ],
     "grammars": [
@@ -562,7 +566,12 @@
         "**.genvb": "package",
         "**.genvb.zs": "package",
         "**.bfarc": "package",
-        "**.bfarc.zs": "package"
+        "**.bfarc.zs": "package",
+        "**.ainb": "assembly",
+        "**.asb": "robot",
+        "**.baev": "log",
+        "**.aamp": "settings",
+        "**.aamp.zs": "settings"
       },
       "[byml]": {
         "editor.insertSpaces": true,
