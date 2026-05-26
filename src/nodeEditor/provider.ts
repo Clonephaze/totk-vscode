@@ -1,11 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { runBridgeJson } from '../bridge';
-import { getCachedPythonExecutable } from '../pythonEnv';
-import { resolveRomfsPath } from '../romfs';
 import { NodeEditorAdapterRegistry } from './registry';
-import type { AdapterParseResult, NodeRoleColor } from './types';
 
 type NodeEditorMessage =
     | { type: 'ready' }
@@ -13,192 +9,116 @@ type NodeEditorMessage =
 
 const VIEW_TYPE = 'totk-editor.ainbNodeEditor';
 
-type AinbDefsBridgePayload = {
-    sourcePath: string;
-    definitions: Array<{
-        name: string;
-        tags: string[];
-        eventColor?: string;
-    }>;
-};
-
-type RuntimeAinbDef = {
-    tags: string[];
-    eventColor?: NodeRoleColor;
-};
-
-function normalizeRoleColor(value: string | undefined): NodeRoleColor | undefined {
-    switch ((value ?? '').trim().toLowerCase()) {
-        case 'blue':
-        case 'red':
-        case 'green':
-        case 'brown':
-        case 'purple':
-        case 'gray':
-        case 'notimplemented':
-            return value!.trim().toLowerCase() as NodeRoleColor;
-        default:
-            return undefined;
-    }
-}
-
 export class AinbNodeEditorProvider implements vscode.CustomTextEditorProvider {
     private readonly registry: NodeEditorAdapterRegistry;
-    private readonly output = vscode.window.createOutputChannel('TOTK Node Editor');
-    private runtimeDefsCache:
-        | {
-            romfsPath: string;
-            sourcePath: string;
-            defs: Map<string, RuntimeAinbDef>;
-        }
-        | undefined;
 
     constructor(private readonly context: vscode.ExtensionContext) {
-        this.registry = new NodeEditorAdapterRegistry(
-            context.extensionPath,
-            () => this.getRuntimeAinbDefs(),
-        );
+        // Pass the extension path so registry adapters can load internal assets if needed
+        this.registry = new NodeEditorAdapterRegistry(context.extensionPath);
     }
 
-    static register(context: vscode.ExtensionContext): vscode.Disposable {
+    public static register(context: vscode.ExtensionContext): vscode.Disposable {
         const provider = new AinbNodeEditorProvider(context);
-        return vscode.window.registerCustomEditorProvider(VIEW_TYPE, provider);
+        return vscode.window.registerCustomEditorProvider(VIEW_TYPE, provider, {
+            webviewOptions: {
+                retainContextWhenHidden: true,
+            },
+        });
     }
 
-    private getRuntimeAinbDefs(): Map<string, RuntimeAinbDef> | undefined {
-        const python = getCachedPythonExecutable();
-        if (!python) {
-            return undefined;
-        }
-        const romfsPath = resolveRomfsPath();
-        if (!romfsPath) {
-            return undefined;
-        }
-
-        if (this.runtimeDefsCache?.romfsPath === romfsPath) {
-            return this.runtimeDefsCache.defs;
-        }
-
-        const bridgePath = path.join(this.context.extensionPath, 'python', 'totk_bridge.py');
-        try {
-            const payload = runBridgeJson<AinbDefsBridgePayload>(
-                python,
-                bridgePath,
-                ['ainb-defs'],
-                undefined,
-                {
-                    ...process.env,
-                    TOTK_EDITOR_ROMFS: romfsPath,
-                },
-            );
-            const defs = new Map<string, RuntimeAinbDef>();
-            for (const definition of payload.definitions) {
-                const name = definition.name?.trim();
-                if (!name) {
-                    continue;
-                }
-                defs.set(name, {
-                    tags: Array.isArray(definition.tags)
-                        ? definition.tags.map((tag) => String(tag))
-                        : [],
-                    eventColor: normalizeRoleColor(definition.eventColor),
-                });
-            }
-            this.runtimeDefsCache = {
-                romfsPath,
-                sourcePath: payload.sourcePath,
-                defs,
-            };
-            this.output.appendLine(
-                `[defs] loaded ${defs.size} runtime node definitions from ${payload.sourcePath}`,
-            );
-            return defs;
-        } catch (error) {
-            const message =
-                error instanceof Error
-                    ? `${error.name}: ${error.message || '(no error message)'}`
-                    : String(error);
-            this.output.appendLine(`[defs] runtime node definitions unavailable: ${message}`);
-            return undefined;
-        }
-    }
-
-    async resolveCustomTextEditor(
+    public async resolveCustomTextEditor(
         document: vscode.TextDocument,
         webviewPanel: vscode.WebviewPanel,
+        _token: vscode.CancellationToken
     ): Promise<void> {
+        webviewPanel.webview.options = {
+            enableScripts: true,
+            localResourceRoots: [vscode.Uri.file(path.join(this.context.extensionPath, 'editors/node-editor/dist'))],
+        };
+
         const adapter = this.registry.getForUri(document.uri);
         if (!adapter) {
-            throw new Error(`No node editor adapter for ${document.uri.fsPath}`);
-        }
-        let adapterResult: AdapterParseResult;
-        try {
-            adapterResult = adapter.parse(document.uri.fsPath, document.getText());
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            this.output.appendLine(`[parse-error] ${document.uri.fsPath}: ${message}`);
-            webviewPanel.webview.html = `<!DOCTYPE html><html><body><h3>TOTK AINB Node Editor</h3><p>Failed to parse AINB JSON model.</p><pre>${message}</pre><p>Reopen with the text editor to inspect raw content.</p></body></html>`;
+            webviewPanel.webview.html = `<h3>Error: No format adapter registered for ${path.basename(document.uri.fsPath)}</h3>`;
             return;
         }
 
-        webviewPanel.webview.options = {
-            enableScripts: true,
-            localResourceRoots: [
-                vscode.Uri.joinPath(this.context.extensionUri, 'editors', 'node-editor', 'dist'),
-            ],
-        };
         webviewPanel.webview.html = this.getWebviewHtml(webviewPanel.webview);
 
-        webviewPanel.webview.onDidReceiveMessage(async (message: NodeEditorMessage) => {
-            if (message.type === 'ready') {
-                await webviewPanel.webview.postMessage({
-                    type: 'init',
-                    payload: adapterResult.model,
-                });
-                return;
+        // Core parsing & dispatch function
+        const updateWebview = () => {
+            try {
+                const result = adapter.parse(document.uri.fsPath, document.getText());
+                webviewPanel.webview.postMessage({ type: 'init', payload: result.model });
+            } catch (err: any) {
+                webviewPanel.webview.postMessage({ type: 'error', payload: { message: err.message } });
             }
-            if (message.type === 'requestSaveScaffold') {
-                // Phase 1: read-only viewer. We keep no-op serializer scaffold to verify
-                // adapter output path remains stable for future editable phase.
-                const serialized = adapter.serializeNoop(adapterResult);
-                this.output.appendLine(
-                    `[save-scaffold] ${document.uri.fsPath} serialized bytes=${serialized.length}`,
-                );
-                await webviewPanel.webview.postMessage({
-                    type: 'saveScaffoldResult',
-                    payload: {
-                        success: true,
-                    },
-                });
+        };
+
+// Message receiver from React App
+        webviewPanel.webview.onDidReceiveMessage(async (msg: any) => {
+            switch (msg.type) {
+                case 'ready':
+                    updateWebview();
+                    break;
+                
+                // NEW: Intercept RPC commands from the React UI
+                case 'rpc_edit':
+                    try {
+                        // msg.payload looks like: { action: "link_nodes", payload: { source: 0, target: 1 } }
+                        const commandString = JSON.stringify(msg.payload);
+                        
+                        // Call your Python environment. Assuming runBridgeJson executes a python script:
+                        const result = await runBridgeJson(
+                            getCachedPythonExecutable(), 
+                            ['ainb_rpc.py', '--file', document.uri.fsPath, '--command', commandString]
+                        );
+
+                        if (result.status === 'success') {
+                            // Python successfully edited the file! 
+                            // The VS Code file watcher (onDidChangeTextDocument) will automatically 
+                            // trigger updateWebview() because the file changed on disk!
+                            vscode.window.showInformationMessage(`Successfully executed: ${msg.payload.action}`);
+                        } else {
+                            vscode.window.showErrorMessage(`Python Error: ${result.message}`);
+                        }
+                    } catch (err) {
+                        vscode.window.showErrorMessage(`Failed to run Python API: ${err}`);
+                    }
+                    break;
             }
+        });
+
+        // Watch for raw JSON updates to live-refresh the webview graph
+        const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(e => {
+            if (e.document.uri.toString() === document.uri.toString()) {
+                updateWebview();
+            }
+        });
+
+        webviewPanel.onDidDispose(() => {
+            changeDocumentSubscription.dispose();
         });
     }
 
     private getWebviewHtml(webview: vscode.Webview): string {
         const distDir = path.join(this.context.extensionPath, 'editors', 'node-editor', 'dist');
         const indexPath = path.join(distDir, 'index.html');
+        
         if (!fs.existsSync(indexPath)) {
-            return `<!DOCTYPE html><html><body><h3>TOTK Node Editor</h3><p>Webview assets missing. Run <code>npm --prefix editors/node-editor install && npm --prefix editors/node-editor run build</code>.</p></body></html>`;
+            return `<!DOCTYPE html><html><body><h3>TOTK Node Editor</h3><p>Webview assets missing. Run <code>npm install && npm run build</code> in your React folder.</p></body></html>`;
         }
 
         let html = fs.readFileSync(indexPath, 'utf-8');
         html = html.replace(/(src|href)="([^"]+)"/g, (_match, attr: string, assetPath: string) => {
-            if (
-                assetPath.startsWith('http://') ||
-                assetPath.startsWith('https://') ||
-                assetPath.startsWith('data:')
-            ) {
+            if (assetPath.startsWith('http') || assetPath.startsWith('data:')) {
                 return `${attr}="${assetPath}"`;
             }
-            const normalized = assetPath.startsWith('/')
-                ? assetPath.slice(1)
-                : assetPath.replace(/^\.\//, '');
+            const normalized = assetPath.replace(/^\.?\//, ''); // removes leading / or ./
             const diskAsset = path.join(distDir, normalized);
             const webUri = webview.asWebviewUri(vscode.Uri.file(diskAsset));
             return `${attr}="${webUri.toString()}"`;
         });
+        
         return html;
     }
 }
-
-export const AINB_NODE_EDITOR_VIEW_TYPE = VIEW_TYPE;

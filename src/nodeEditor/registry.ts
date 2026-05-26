@@ -1,11 +1,10 @@
-import type { NodeRoleColor } from './types';
 import * as vscode from 'vscode';
 import { AinbNodeFormatAdapter } from './ainbAdapter';
-import type { NodeFormatAdapter } from './types';
+import type { NodeFormatAdapter, NodeRoleColor } from './types';
 
-type AinbDef = {
+export type AinbDef = {
     tags: string[];
-    eventColor?: NodeRoleColor;
+    eventColor?: NodeRoleColor | string;
 };
 
 export class NodeEditorAdapterRegistry {
@@ -15,7 +14,9 @@ export class NodeEditorAdapterRegistry {
         extensionPath: string,
         getRuntimeAinbDefs?: () => Map<string, AinbDef> | undefined,
     ) {
-        this.adapters = [new AinbNodeFormatAdapter(extensionPath, getRuntimeAinbDefs)];
+        this.adapters = [
+            new AinbNodeFormatAdapter(extensionPath, getRuntimeAinbDefs)
+        ];
     }
 
     getForUri(uri: vscode.Uri): NodeFormatAdapter | undefined {

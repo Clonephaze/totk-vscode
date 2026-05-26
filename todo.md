@@ -38,5 +38,5 @@
 - [x] Node colouring
 - [x] Load all connections on AINB load and DONT cull them completely (impl frustum culling or pixel culling or something)
 - [ ] Loading screen if possible
-- [ ] No more "and x more..."
-- [ ] Impl my auto sort algorithm
+~~- [x] No more "and x more..."~~ depr
+~~- [x] Impl my auto sort algorithm~~ depr

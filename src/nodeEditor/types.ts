@@ -20,7 +20,7 @@ export type NodeEditorNode = {
     x: number;
     y: number;
     tags: string[];
-    roleColor: NodeRoleColor;
+    roleColor: NodeRoleColor | string;
     inputPins: NodeEditorPin[];
     outputPins: NodeEditorPin[];
     sections: Array<{
@@ -36,6 +36,7 @@ export type NodeEditorEdge = {
     label: string;
     sourceHandle?: string;
     targetHandle?: string;
+    animated?: boolean; // We'll use this to make Data flow edges animated vs Flow edges static
 };
 
 export type NodeEditorModel = {
@@ -54,5 +55,4 @@ export interface NodeFormatAdapter {
     readonly id: string;
     supports(filePath: string): boolean;
     parse(filePath: string, rawText: string): AdapterParseResult;
-    serializeNoop(result: AdapterParseResult): string;
 }
