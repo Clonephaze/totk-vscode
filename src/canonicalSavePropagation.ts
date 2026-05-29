@@ -172,41 +172,30 @@ async function ensureArchiveInProject(
     return { ready: true, copied: true };
 }
 
+interface TkvscConfig {
+    canonicalSyncBlacklistPrefixes?: string[];
+    canonicalSyncFileExtensionBlacklist?: string[];
+}
+
+function loadTkvscConfig(projectRoot: string): TkvscConfig {
+    try {
+        const configPath = path.join(projectRoot, '.tkvsc');
+        if (fs.existsSync(configPath)) {
+            const raw = fs.readFileSync(configPath, 'utf8');
+            return JSON.parse(raw) as TkvscConfig;
+        }
+    } catch (e) {
+        // Suppress or ignore
+    }
+    return {};
+}
+
 export async function propagateCanonicalSave(
     options: CanonicalSavePropagationOptions,
 ): Promise<void> {
     if (!options.enabled) {
         return;
     }
-
-    const canonicalPath = options.writeInput.internalPath.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
-    if (!canonicalPath) {
-        return;
-    }
-    if (isCanonicalPathBlacklisted(canonicalPath, options.blacklistPrefixes)) {
-        options.output.appendLine(
-            `[canonical-save] Skipped sync for blacklisted canonical path: ${canonicalPath}`,
-        );
-        return;
-    }
-    if (pathContainsBlacklistedArchiveType(canonicalPath, options.archiveTypeBlacklist)) {
-        options.output.appendLine(
-            `[canonical-save] Skipped sync for blacklisted archive type path: ${canonicalPath}`,
-        );
-        return;
-    }
-    if (pathMatchesBlacklistedFileSuffix(canonicalPath, options.fileExtensionBlacklist)) {
-        options.output.appendLine(
-            `[canonical-save] Skipped sync for blacklisted file suffix: ${canonicalPath}`,
-        );
-        return;
-    }
-
-    const archiveMatches = (await queryCanonicalArchives(
-        options.canonicalIndexPath,
-        options.romfsPath,
-        canonicalPath,
-    )) ?? [];
 
     const activeProjectRoot = inferActiveProjectRoot(
         options.writeInput.diskArchivePath,
@@ -218,6 +207,46 @@ export async function propagateCanonicalSave(
         );
         return;
     }
+
+    // Load and merge project-specific exclusions from .tkvsc
+    const projectConfig = loadTkvscConfig(activeProjectRoot.fsPath);
+    const mergedBlacklistPrefixes = [...options.blacklistPrefixes];
+    if (projectConfig.canonicalSyncBlacklistPrefixes) {
+        mergedBlacklistPrefixes.push(...projectConfig.canonicalSyncBlacklistPrefixes);
+    }
+    const mergedFileExtensionBlacklist = [...options.fileExtensionBlacklist];
+    if (projectConfig.canonicalSyncFileExtensionBlacklist) {
+        mergedFileExtensionBlacklist.push(...projectConfig.canonicalSyncFileExtensionBlacklist);
+    }
+
+    const canonicalPath = options.writeInput.internalPath.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
+    if (!canonicalPath) {
+        return;
+    }
+    if (isCanonicalPathBlacklisted(canonicalPath, mergedBlacklistPrefixes)) {
+        options.output.appendLine(
+            `[canonical-save] Skipped sync for blacklisted canonical path: ${canonicalPath}`,
+        );
+        return;
+    }
+    if (pathContainsBlacklistedArchiveType(canonicalPath, options.archiveTypeBlacklist)) {
+        options.output.appendLine(
+            `[canonical-save] Skipped sync for blacklisted archive type path: ${canonicalPath}`,
+        );
+        return;
+    }
+    if (pathMatchesBlacklistedFileSuffix(canonicalPath, mergedFileExtensionBlacklist)) {
+        options.output.appendLine(
+            `[canonical-save] Skipped sync for blacklisted file suffix: ${canonicalPath}`,
+        );
+        return;
+    }
+
+    const archiveMatches = (await queryCanonicalArchives(
+        options.canonicalIndexPath,
+        options.romfsPath,
+        canonicalPath,
+    )) ?? [];
 
     const projectRomfsRoot = resolveProjectRomfsMount(activeProjectRoot.fsPath, options.romfsPath);
     const relFromProjectRomfs = path.relative(projectRomfsRoot, options.writeInput.diskArchivePath);
@@ -275,7 +304,7 @@ export async function propagateCanonicalSave(
         ) {
             continue;
         }
-        if (pathMatchesBlacklistedFileSuffix(match.canonicalPath, options.fileExtensionBlacklist)) {
+        if (pathMatchesBlacklistedFileSuffix(match.canonicalPath, mergedFileExtensionBlacklist)) {
             continue;
         }
 

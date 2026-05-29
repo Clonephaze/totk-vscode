@@ -40,6 +40,16 @@
           }
         ],
         "priority": "default"
+      },
+      {
+        "viewType": "totk-editor.tkvscEditor",
+        "displayName": "TKVSC Config Editor",
+        "selector": [
+          {
+            "filenamePattern": ".tkvsc"
+          }
+        ],
+        "priority": "default"
       }
     ],
     "iconThemes": [
@@ -129,6 +139,19 @@
         }
       },
       {
+        "id": "totk-tkvsc",
+        "filenames": [
+          ".tkvsc"
+        ],
+        "aliases": [
+          "TKVSC Exclusions"
+        ],
+        "icon": {
+          "light": "./icons/logo.svg",
+          "dark": "./icons/logo.svg"
+        }
+      },
+      {
         "id": "totk-xlnk",
         "extensions": [
           ".belnk",
@@ -196,6 +219,10 @@
       {
         "command": "totk-editor.addDumpToProject",
         "title": "TOTK: Add to Project…"
+      },
+      {
+        "command": "totk-editor.configureFilteringRules",
+        "title": "TOTK: Blacklist (Filter Rule)…"
       },
       {
         "command": "totk-editor.archiveDelete",
@@ -405,6 +432,16 @@
           "submenu": "totk-editor.addToProject",
           "when": "view == totk-editor.gameDump && (viewItem == dumpFile || viewItem == dumpVirtualFile || viewItem == dumpArchive)",
           "group": "2_add"
+        },
+        {
+          "command": "totk-editor.configureFilteringRules",
+          "when": "view == totk-editor.archives && (viewItem == archiveFile || viewItem == archiveVirtualFile || viewItem == archivePackage)",
+          "group": "8_filter@1"
+        },
+        {
+          "command": "totk-editor.configureFilteringRules",
+          "when": "view == totk-editor.gameDump && (viewItem == dumpFile || viewItem == dumpVirtualFile || viewItem == dumpArchive)",
+          "group": "8_filter@1"
         }
       ],
       "totk-editor.addToProject": [

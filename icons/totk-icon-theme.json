@@ -30,6 +30,9 @@
     },
     "_totk_texture": {
       "iconPath": "./texture.svg"
+    },
+    "_totk_tkvsc": {
+      "iconPath": "./logo.svg"
     }
   },
   "folderNames": {
@@ -149,12 +152,14 @@
     "txtg.zs": "_totk_texture"
   },
   "fileNames": {
-    ".tkproj": "_totk_tkproj"
+    ".tkproj": "_totk_tkproj",
+    ".tkvsc": "_totk_tkvsc"
   },
   "languageIds": {
     "byml": "_totk_byml",
     "bgyml": "_totk_bgyml",
     "msbt": "_totk_msbt",
-    "totk-xlnk": "_totk_xlnk"
+    "totk-xlnk": "_totk_xlnk",
+    "totk-tkvsc": "_totk_tkvsc"
   }
 }

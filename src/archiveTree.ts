@@ -11,6 +11,10 @@ function isTkprojFile(name: string): boolean {
     return name.toLowerCase().endsWith('.tkproj');
 }
 
+function isTkvscFile(name: string): boolean {
+    return name.toLowerCase() === '.tkvsc';
+}
+
 export function toSarcUri(fileUri: vscode.Uri): vscode.Uri {
     return fileUri.with({ scheme: 'sarc' });
 }
@@ -40,6 +44,8 @@ export class ArchiveTreeItem extends vscode.TreeItem {
             this.iconPath = vscode.Uri.joinPath(extensionUri, 'icons', 'texture.svg');
         } else if (isTkprojFile(entryName) && extensionUri) {
             this.iconPath = vscode.Uri.joinPath(extensionUri, 'icons', 'tkproj.svg');
+        } else if (isTkvscFile(entryName) && extensionUri) {
+            this.iconPath = vscode.Uri.joinPath(extensionUri, 'icons', 'logo.svg');
         }
     }
 }

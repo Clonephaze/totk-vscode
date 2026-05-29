@@ -51,6 +51,7 @@ import {
 } from './externalTools';
 import { getCoreExtensions, initCoreFsExtensions } from './coreFsExtensions';
 import { TkprojEditorProvider } from './tkprojEditor';
+import { TkvscEditorProvider } from './tkvscEditor';
 import { setExtensionPath } from './romfsIndex';
 import {
     hasBaseCanonicalPath,
@@ -58,8 +59,9 @@ import {
     setCanonicalIndexExtensionPath,
 } from './canonicalPathIndex';
 import { propagateCanonicalSave } from './canonicalSavePropagation';
-import { normalizePath, pathsEqual } from './projectPaths';
+import { isWithinRoot, normalizePath, pathsEqual, resolveProjectRomfsMount } from './projectPaths';
 import type { DiskWriteNotification } from './totkDiskFs';
+import { configureFilteringRules } from './filteringRules';
 import {
     clearProjectImportState,
     ensureProjectCanonicalOverlayExists,
@@ -588,6 +590,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     registerDocumentLanguageModes(context);
     context.subscriptions.push(TkprojEditorProvider.register(context));
+    context.subscriptions.push(TkvscEditorProvider.register(context));
 
     const bridgePath = path.join(context.extensionPath, 'python', 'totk_bridge.py');
     const getPython = () => getCachedPythonExecutable() ?? '';
@@ -846,6 +849,27 @@ export async function activate(context: vscode.ExtensionContext) {
     };
 
     context.subscriptions.push(
+        vscode.commands.registerCommand(
+            'totk-editor.configureFilteringRules',
+            async (item: any) => {
+                let uri: vscode.Uri | undefined;
+                if (item instanceof vscode.Uri) {
+                    uri = item;
+                } else if (item && typeof item === 'object' && 'resourceUri' in item && item.resourceUri) {
+                    uri = item.resourceUri;
+                } else {
+                    uri = vscode.window.activeTextEditor?.document.uri;
+                }
+
+                if (!uri) {
+                    void vscode.window.showWarningMessage('No active file selected to configure filter rules.');
+                    return;
+                }
+
+                const projectRoots = archiveTree?.getProjectRoots() ?? [];
+                await configureFilteringRules(uri, projectRoots);
+            }
+        ),
         vscode.commands.registerCommand('totk-editor.rebuildRomfsIndex', async () => {
             const romfsPath = resolveRomfsPath();
             if (!romfsPath) {
