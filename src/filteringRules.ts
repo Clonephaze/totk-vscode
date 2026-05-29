@@ -21,14 +21,12 @@ export async function configureFilteringRules(
     const fsPath = uri.fsPath;
     const romfsPath = resolveRomfsPath();
 
-    // 1. Resolve relative path from RomFS or project mount
     let relativePath = '';
     const fileName = path.basename(fsPath);
 
     if (romfsPath && isWithinRoot(romfsPath, fsPath)) {
         relativePath = path.relative(romfsPath, fsPath).replace(/\\/g, '/');
     } else {
-        // Find if it's inside any project root
         let matched = false;
         for (const project of projectRoots) {
             if (isWithinRoot(project.fsPath, fsPath)) {
@@ -45,7 +43,6 @@ export async function configureFilteringRules(
         }
     }
 
-    // 2. Step 1: Global vs Project specific (Skip and force Global if on gamedump window)
     let isProjectSpecific = false;
     if (uri.scheme !== 'totk-dump') {
         const scopePick = await vscode.window.showQuickPick(
@@ -65,7 +62,6 @@ export async function configureFilteringRules(
         isProjectSpecific = scopePick.label === 'Project-Specific Rules';
     }
 
-    // 3. Step 2: Select type
     const typePick = await vscode.window.showQuickPick(
         [
             { label: 'Specific File', description: `Exclude just this file (${fileName})` },
@@ -107,7 +103,6 @@ export async function configureFilteringRules(
         ruleValue = varPick.label;
         configSetting = 'canonicalSyncFileExtensionBlacklist';
     } else {
-        // Folder Prefix
         const prefixes = getFolderPrefixes(relativePath);
         if (prefixes.length === 0) {
             void vscode.window.showWarningMessage('This file is at the root and has no parent folders.');
@@ -127,10 +122,8 @@ export async function configureFilteringRules(
         configSetting = 'canonicalSyncBlacklistPrefixes';
     }
 
-    // 4. Step 3: Select project if project specific
     let targetProjectPath: string | undefined;
     if (isProjectSpecific) {
-        // Check if we are right-clicking a file inside a project root
         const containingProject = projectRoots.find(p => isWithinRoot(p.fsPath, fsPath));
         if (containingProject) {
             targetProjectPath = containingProject.fsPath;
@@ -157,11 +150,9 @@ export async function configureFilteringRules(
         }
     }
 
-    // Apply rule!
     if (isProjectSpecific && targetProjectPath) {
         await updateTkvscConfigArray(targetProjectPath, configSetting, ruleValue);
     } else {
-        // Global setting
         await updateGlobalConfigArray(configSetting, (current) => {
             if (current.includes(ruleValue)) {
                 void vscode.window.showInformationMessage(`Rule '${ruleValue}' is already in the global blacklist.`);
@@ -179,7 +170,6 @@ function getExtensionVariations(fileName: string): string[] {
         return [];
     }
     const variations: string[] = [];
-    // Generate right-to-left suffix variations, excluding the full filename
     for (let i = parts.length - 1; i >= 1; i--) {
         variations.push('.' + parts.slice(i).join('.'));
     }

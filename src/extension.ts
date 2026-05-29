@@ -59,7 +59,7 @@ import {
     setCanonicalIndexExtensionPath,
 } from './canonicalPathIndex';
 import { propagateCanonicalSave } from './canonicalSavePropagation';
-import { isWithinRoot, normalizePath, pathsEqual, resolveProjectRomfsMount } from './projectPaths';
+import { normalizePath, pathsEqual } from './projectPaths';
 import type { DiskWriteNotification } from './totkDiskFs';
 import { configureFilteringRules } from './filteringRules';
 import {
@@ -139,6 +139,7 @@ class SarcProvider implements vscode.FileSystemProvider {
     readonly onDidChangeFile = this._onDidChangeFile.event;
 
     private fileCache = new Map<string, string[]>();
+    private virtualDirectories = new Map<string, string>();
 
     constructor(
         private readonly bridgePath: string,
@@ -161,7 +162,7 @@ class SarcProvider implements vscode.FileSystemProvider {
         return python;
     }
 
-    watch(uri: vscode.Uri): vscode.Disposable {
+    watch(_uri: vscode.Uri): vscode.Disposable {
         return new vscode.Disposable(() => { });
     }
 
@@ -295,6 +296,18 @@ class SarcProvider implements vscode.FileSystemProvider {
             return this.statDiskPath(fsPath);
         }
 
+        const normalized = fsPath.replace(/\\/g, '/');
+        const lower = normalized.toLowerCase();
+        
+        if (this.virtualDirectories.has(lower)) {
+            return { type: vscode.FileType.Directory, ctime: 0, mtime: 0, size: 0 };
+        }
+        for (const virtLower of this.virtualDirectories.keys()) {
+            if (virtLower.startsWith(lower + '/')) {
+                return { type: vscode.FileType.Directory, ctime: 0, mtime: 0, size: 0 };
+            }
+        }
+
         const diskArchive = this.getDiskArchive(fsPath);
         const locator = this.getLocator(fsPath, diskArchive);
         const entryType = await this.entryTypeForLocator(diskArchive, locator);
@@ -335,6 +348,21 @@ class SarcProvider implements vscode.FileSystemProvider {
             const entryType = this.entryTypeInListing(files, prefix, name);
             if (entryType !== undefined) {
                 result.set(name, entryType);
+            }
+        }
+
+        const targetPrefix = fsPath.replace(/\\/g, '/').toLowerCase().replace(/\/$/, '') + '/';
+        for (const [virtLower, virtOriginal] of this.virtualDirectories.entries()) {
+            if (virtLower.startsWith(targetPrefix) && virtLower.length > targetPrefix.length) {
+                const remainderOriginal = virtOriginal.substring(targetPrefix.length);
+                const slashIndex = remainderOriginal.indexOf('/');
+                const childName = slashIndex === -1 ? remainderOriginal : remainderOriginal.substring(0, slashIndex);
+                if (childName) {
+                    const existingKey = Array.from(result.keys()).find(k => k.toLowerCase() === childName.toLowerCase());
+                    if (!existingKey) {
+                        result.set(childName, vscode.FileType.Directory);
+                    }
+                }
             }
         }
 
@@ -419,13 +447,12 @@ class SarcProvider implements vscode.FileSystemProvider {
             return;
         }
 
-        // TODO: Allow creating folders in archives
-        throw vscode.FileSystemError.NoPermissions(
-            'Cannot create empty folders inside archives. Create a file in that folder instead.',
-        );
+        const normalized = fsPath.replace(/\\/g, '/');
+        this.virtualDirectories.set(normalized.toLowerCase(), normalized);
+        this.notifyChanged(uri, vscode.FileChangeType.Created);
     }
 
-    async writeFile(uri: vscode.Uri, content: Uint8Array, options: { create: boolean; overwrite: boolean }): Promise<void> {
+    async writeFile(uri: vscode.Uri, content: Uint8Array, _options: { create: boolean; overwrite: boolean }): Promise<void> {
         const fsPath = uri.fsPath;
 
         if (this.isMutatableDiskPath(fsPath)) {
@@ -511,15 +538,38 @@ class SarcProvider implements vscode.FileSystemProvider {
             return;
         }
 
+        const normalizedPath = fsPath.replace(/\\/g, '/');
+        const lowerPath = normalizedPath.toLowerCase();
+        let deletedVirtual = false;
+        
+        if (this.virtualDirectories.has(lowerPath)) {
+            this.virtualDirectories.delete(lowerPath);
+            deletedVirtual = true;
+        }
+        for (const virtLower of this.virtualDirectories.keys()) {
+            if (virtLower.startsWith(lowerPath + '/')) {
+                this.virtualDirectories.delete(virtLower);
+                deletedVirtual = true;
+            }
+        }
+
         const diskArchive = this.getDiskArchive(fsPath);
         const filePath = this.getLocator(fsPath, diskArchive);
-        await runBridgeJsonAsync<{ success: boolean }>(
-            this.requirePython(),
-            this.bridgePath,
-            ['delete-entry', diskArchive, filePath],
-            undefined,
-            getBridgeEnv(),
-        );
+        
+        try {
+            await runBridgeJsonAsync<{ success: boolean }>(
+                this.requirePython(),
+                this.bridgePath,
+                ['delete-entry', diskArchive, filePath],
+                undefined,
+                getBridgeEnv(),
+            );
+        } catch (error) {
+            if (!deletedVirtual) {
+                throw error;
+            }
+        }
+
         for (const key of [...this.fileCache.keys()]) {
             if (key.startsWith(`${diskArchive}::`)) {
                 this.fileCache.delete(key);
@@ -538,6 +588,26 @@ class SarcProvider implements vscode.FileSystemProvider {
             return;
         }
 
+        const oldNormalized = oldPath.replace(/\\/g, '/');
+        const oldLower = oldNormalized.toLowerCase();
+        const newNormalized = newPath.replace(/\\/g, '/');
+        const newLower = newNormalized.toLowerCase();
+        let renamedVirtual = false;
+
+        for (const [virtLower, virtOriginal] of Array.from(this.virtualDirectories.entries())) {
+            if (virtLower === oldLower) {
+                this.virtualDirectories.delete(virtLower);
+                this.virtualDirectories.set(newLower, newNormalized);
+                renamedVirtual = true;
+            } else if (virtLower.startsWith(oldLower + '/')) {
+                this.virtualDirectories.delete(virtLower);
+                const remainder = virtOriginal.substring(oldNormalized.length);
+                const newVirtOriginal = newNormalized + remainder;
+                this.virtualDirectories.set(newVirtOriginal.toLowerCase(), newVirtOriginal);
+                renamedVirtual = true;
+            }
+        }
+
         const oldDiskArchive = this.getDiskArchive(oldPath);
         const newDiskArchive = this.getDiskArchive(newPath);
         if (oldDiskArchive !== newDiskArchive) {
@@ -545,13 +615,21 @@ class SarcProvider implements vscode.FileSystemProvider {
         }
         const oldLocator = this.getLocator(oldPath, oldDiskArchive);
         const newLocator = this.getLocator(newPath, newDiskArchive);
-        await runBridgeJsonAsync<{ success: boolean }>(
-            this.requirePython(),
-            this.bridgePath,
-            ['rename-entry', oldDiskArchive, oldLocator, newLocator],
-            undefined,
-            getBridgeEnv(),
-        );
+        
+        try {
+            await runBridgeJsonAsync<{ success: boolean }>(
+                this.requirePython(),
+                this.bridgePath,
+                ['rename-entry', oldDiskArchive, oldLocator, newLocator],
+                undefined,
+                getBridgeEnv(),
+            );
+        } catch (error) {
+            if (!renamedVirtual) {
+                throw error;
+            }
+        }
+
         for (const key of [...this.fileCache.keys()]) {
             if (key.startsWith(`${oldDiskArchive}::`)) {
                 this.fileCache.delete(key);
@@ -573,8 +651,6 @@ export async function activate(context: vscode.ExtensionContext) {
     const output = vscode.window.createOutputChannel('TOTK Editor');
     context.subscriptions.push(output);
 
-    // Register essential setup commands before any heavy initialization so
-    // users can always recover if activation fails later.
     context.subscriptions.push(
         vscode.commands.registerCommand('totk-editor.setupPython', async () => {
             const python = await ensurePythonEnvironment(context, true);

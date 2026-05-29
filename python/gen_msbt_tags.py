@@ -1,4 +1,4 @@
-import yaml, json, os
+import yaml
 
 config_path = '../vendor/TotK.gcf'
 with open(config_path, 'r', encoding='utf-8') as f:

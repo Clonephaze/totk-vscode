@@ -3,7 +3,7 @@
   "icon": "icons/ExtensionIcon.png",
   "publisher": "totk-editor",
   "displayName": "totk-vscode",
-  "description": "Edit various TotK formats natively in VSCode",
+  "description": "Edit various TOTK formats natively in VSCode",
   "version": "0.0.1",
   "repository": {
     "type": "git",
@@ -202,13 +202,18 @@
         "icon": "$(repo-create)"
       },
       {
+        "command": "totk-editor.addProjectFolders",
+        "title": "TOTK: Add Projects via File Explorer",
+        "icon": "$(folder-opened)"
+      },
+      {
         "command": "totk-editor.refreshArchives",
         "title": "TOTK: Refresh Projects",
         "icon": "$(refresh)"
       },
       {
         "command": "totk-editor.removeArchiveRoot",
-        "title": "TOTK: Remove from Projects"
+        "title": "Remove from Projects"
       },
       {
         "command": "totk-editor.refreshGameDump",
@@ -225,7 +230,7 @@
       },
       {
         "command": "totk-editor.configureFilteringRules",
-        "title": "TOTK: Blacklist (Filter Rule)…"
+        "title": "Blacklist (Filter Rule)…"
       },
       {
         "command": "totk-editor.archiveDelete",
@@ -340,7 +345,7 @@
     "viewsWelcome": [
       {
         "view": "totk-editor.archives",
-        "contents": "Browse `.pack`, `.sarc`, `.genvb`, `.blarc`, `.bfarc`, and `.bntx` as expandable trees in the **TOTK Archives** sidebar tab.\n\n[Open Archive](command:totk-editor.openPack)\n\n[Browse Workspace Folder](command:totk-editor.addWorkspaceToArchives)"
+        "contents": "Browse `.pack`, `.sarc`, `.genvb`, `.blarc`, `.bfarc`, and `.bntx` as expandable trees in the **TOTK Archives** sidebar tab.\n\n[Open Archive](command:totk-editor.openPack)\n\n[Browse Workspace Folder](command:totk-editor.addWorkspaceToArchives)\n\n[Add Projects via File Explorer](command:totk-editor.addProjectFolders)"
       },
       {
         "view": "totk-editor.gameDump",
@@ -356,6 +361,11 @@
         },
         {
           "command": "totk-editor.addWorkspaceToArchives",
+          "when": "view == totk-editor.archives",
+          "group": "navigation"
+        },
+        {
+          "command": "totk-editor.addProjectFolders",
           "when": "view == totk-editor.archives",
           "group": "navigation"
         },

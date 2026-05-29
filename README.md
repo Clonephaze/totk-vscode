@@ -20,6 +20,8 @@
 
 The **T**ears of the **K**ingdom **V**isual **S**tudio **C**ode Extension or **TKVSC** is a Visual Studio Code extension for editing and browsing **Tears of the Kingdom** (**TotK**) game files.
 
+**TKVSC** GameBanana page: https://gamebanana.com/tools/22893.
+
 ## Features
 
 
@@ -44,8 +46,8 @@ Preview and edit subfiles of SARC and BNTX archives
 **Your Mods**
 - Add the current folder open in VS Code to a list of Project Folders.
 
-**TotK Dump**
-- Browse your dump of TotK in Read-Only mode. Right click to add a file to the correct romfs path within a Project Folder of your choosing
+**TOTK Dump**
+- Browse your dump of TOTK in Read-Only mode. Right click to add a file to the correct romfs path within a Project Folder of your choosing
 
 ### Additional capabilities:
 
@@ -62,7 +64,7 @@ Preview and edit subfiles of SARC and BNTX archives
 * [Python 3.12](https://www.python.org/downloads/release/python-31213/)
 * Node.js
 * Python 3.12-venv (on Linux)
-* Valid TotK dump
+* Valid TOTK dump
 
 ### Steps
 1. Install the extension (VSIX).
@@ -120,11 +122,7 @@ py -3.12 -m pip install -r requirements.txt
 **AeonSake**: [MSBT Editor](https://gitlab.com/AeonSake/msbt-editor) - TotK Config included\
 **P1gyy**: [pymsbt fork](https://github.com/TKVSC-Team/pymsbt) integrated into codebase
 
-
-
-
-
 ## Help and Community
 
 - [Discord Server](https://discord.gg/BbVXenRFVc)
-<!--- [Documentation](https://tkmm.org/docs)--->
+<!--- [Documentation]()--->

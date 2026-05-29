@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-/** Read-only view of archive browsing (same paths as `sarc://`, different scheme). */
+/** Read-only view of archive browsing. */
 export function createReadonlyArchiveFs(
     sarc: vscode.FileSystemProvider,
     sourceScheme = 'sarc',

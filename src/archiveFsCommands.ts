@@ -1,6 +1,5 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { isPathInsideArchive } from './archives';
 import { toSarcUri, type ArchiveTreeItem } from './archiveTree';
 import { isAampExtension } from './aampExtensions';
 

@@ -1,4 +1,4 @@
-"""Format MSBT label/text data for editor display (BYML-like key: value lines)."""
+"""Format MSBT label/text data for editor display."""
 
 import re
 import sys
@@ -128,9 +128,7 @@ def _parse_value(raw: str) -> str:
 
 
 def _has_bare_quotes(text: str) -> bool:
-    """Return True if `text` contains a double-quote that is NOT inside a {{ }} tag block."""
     import re
-    # Remove all {{...}} tag spans, then check for remaining quotes
     stripped = re.sub(r'\{\{[^}]*(?:\}[^}][^}]*)?\}\}', '', text)
     return '"' in stripped
 

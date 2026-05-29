@@ -2,22 +2,6 @@ import struct
 import shlex
 from msbt_tags import MSBT_TAGS_BY_ID, MSBT_TAGS_BY_NAME
 
-
-# ---------------------------------------------------------------------------
-# Nintendo "suffix-string" argument encoding
-#
-# Each `str`-typed argument is stored as a null-terminated UTF-16LE string.
-# Empty args are represented as just \x00\x00.
-# Non-empty args begin with a control character (U+0002, U+0004, …) that
-# encodes how many UTF-16 code units the game should strip from the base
-# word before appending the suffix (strip_chars = ord(ctrl) // 2).
-# MSBT Editor hides this ctrl char and displays only the visible suffix text.
-#
-# Example — gender m="" f="e" n="":
-#   00 00 | 02 00 65 00 00 00 | 00 00
-#   (m empty) (ctrl U+0002, 'e', null) (n empty)
-# ---------------------------------------------------------------------------
-
 def _decode_str_arg(raw: str):
     """Strip the leading Nintendo ctrl char from a decoded str argument.
 
@@ -29,21 +13,6 @@ def _decode_str_arg(raw: str):
 
 
 def _decode_str_args_block(data: bytes, count: int) -> list[str]:
-    """Decode *count* consecutive str-typed arguments from *data*.
-
-    The encoding rules (observed from real MSBT files):
-    - Decode all bytes as UTF-16LE into a character stream.
-    - Walk the stream assigning characters to successive arguments:
-        • U+0000  → current argument is the empty string; advance to next arg.
-        • ctrl char (0x0001-0x001F) → starts a non-empty arg.  The ctrl char
-          is a Nintendo strip-count prefix (hidden from the user).  Read the
-          visible text that follows until the next U+0000 or the next ctrl
-          char (which would be the start of the following argument).
-        • regular char (≥ 0x0020) → starts a non-empty arg that has **no**
-          ctrl prefix.  Same end-of-arg rules as above.
-    """
-    # Decode entire remaining blob as UTF-16LE chars.
-    # If odd number of bytes, ignore the trailing byte.
     usable = len(data) & ~1
     chars = []
     for i in range(0, usable, 2):
@@ -67,20 +36,15 @@ def _decode_str_args_block(data: bytes, count: int) -> list[str]:
 
         has_ctrl = ch < 0x0020
         if has_ctrl:
-            # Skip the ctrl prefix — it's metadata, not visible text.
             ci += 1
 
-        # Read visible text until null OR until a ctrl char that starts the
-        # next argument.
         text_chars: list[str] = []
         while ci < len(chars):
             ch = chars[ci]
             if ch == 0x0000:
-                ci += 1  # consume the null terminator
+                ci += 1
                 break
             if ch < 0x0020:
-                # This ctrl char belongs to the NEXT argument — stop here
-                # without consuming it.
                 break
             text_chars.append(chr(ch))
             ci += 1
@@ -115,15 +79,13 @@ def command_to_tag(magic, group, type_, hexdata):
     offset = 0
     args_str = []
 
-    # Collect the run of consecutive str args at the tail so we can
-    # decode them together with the smarter boundary logic.
     str_run_start = None
     for i, a in enumerate(args_def):
         if a.get('dataType') == 'str':
             if str_run_start is None:
                 str_run_start = i
         else:
-            str_run_start = None  # reset; only care about trailing run
+            str_run_start = None 
 
     for i, arg in enumerate(args_def):
         dtype = arg.get('dataType')
@@ -148,7 +110,6 @@ def command_to_tag(magic, group, type_, hexdata):
                 offset += 1
         elif dtype == 'str':
             if str_run_start is not None and i >= str_run_start:
-                # Decode all remaining consecutive str args in one pass.
                 str_args_remaining = [a for a in args_def[i:] if a.get('dataType') == 'str']
                 decoded_strs = _decode_str_args_block(b[offset:], len(str_args_remaining))
                 for j, sa in enumerate(str_args_remaining):
@@ -156,9 +117,8 @@ def command_to_tag(magic, group, type_, hexdata):
                     sa_val = decoded_strs[j] if j < len(decoded_strs) else ''
                     if sa_val is not None:
                         args_str.append(f'{sa_name}="{sa_val}"')
-                break  # We've consumed all remaining str args
+                break
             else:
-                # Lone str arg not in a trailing run: use simple null-terminated scan.
                 end = offset
                 while end + 1 < len(b):
                     if b[end] == 0 and b[end + 1] == 0:
@@ -250,8 +210,6 @@ def tag_to_command(tag_content):
         elif dtype == 'bool':
             b.extend(struct.pack('<H', 1 if val else 0))
         elif dtype == 'str':
-            # Prepend U+0002 (strip-1-char) as a safe default ctrl for non-empty suffixes.
-            # Empty suffixes are written as just \x00\x00.
             if val_str:
                 b.extend('\u0002'.encode('utf-16-le'))
                 b.extend(val_str.encode('utf-16-le'))

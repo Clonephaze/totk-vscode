@@ -9,7 +9,6 @@ from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 
 import oead
-import zstandard as zstd
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
 _ASB_TOOLKIT_DIRS = [
@@ -41,10 +40,6 @@ def _stem_from_internal_path(internal_path: str) -> str:
         return name[:-4]
     return os.path.splitext(name)[0]
 
-
-# ASB files live in .../AS/<stem>.asb
-# Their paired AsNode BAEV files live in .../AnimationEvent/AsNode/<stem>.baev
-# These two functions map between those locations.
 
 def _sibling_baev_path(internal_path: str) -> str:
     """Map a SARC-internal ASB path to its sibling AsNode BAEV path.
@@ -84,12 +79,6 @@ def _sibling_baev_path(internal_path: str) -> str:
 
 
 def _sibling_baev_disk_path(file_path: str) -> str:
-    """Map a disk ASB path to its sibling AsNode BAEV path.
-
-    /romfs/Actor/AS/Foo.root.asb    -> /romfs/Actor/AnimationEvent/AsNode/Foo.root.baev
-    /romfs/Actor/AS/Foo.root.asb.zs -> /romfs/Actor/AnimationEvent/AsNode/Foo.root.baev.zs
-    Returns '' if the path is not inside an AS directory.
-    """
     normalized = file_path.replace('\\', '/')
 
     if normalized.endswith('.asb.zs'):
