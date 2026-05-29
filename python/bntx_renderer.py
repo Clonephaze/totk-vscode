@@ -1,20 +1,15 @@
 """Render BNTX textures to PNG files.
 
-Pipeline: parse BNTX → deswizzle (block-linear) → decode (BCn/ASTC/raw) → PNG.
+Parse BNTX -> deswizzle (block-linear) -> decode (BCn/ASTC/raw) -> PNG.
 Uses texture2ddecoder for BCn/ASTC and Pillow for PNG output.
 Deswizzle uses a pure-Python Tegra X1 block-linear implementation.
 """
 
 import os
-import sys
 import tempfile
 
 from bntx_reader import _parse_textures, _log
 
-# ---------------------------------------------------------------------------
-#  Format table: BNTX format_id → (name, bpp, blk_w, blk_h, decoder_key)
-#  Format type is in bits 8..15 of the format_id.
-# ---------------------------------------------------------------------------
 _FORMAT_TABLE: dict[int, tuple[str, int, int, int, str]] = {
     0x01: ('R4G4_UNORM',    1, 1, 1, 'r8'),
     0x02: ('R8_UNORM',      1, 1, 1, 'r8'),
@@ -240,7 +235,7 @@ def _bc5_to_normal(bgra: bytes, pixel_count: int) -> bytes:
 
 
 # ---------------------------------------------------------------------------
-#  Public API
+#  API
 # ---------------------------------------------------------------------------
 
 _CHANNEL_NAMES = {0: 'Zero', 1: 'One', 2: 'Red', 3: 'Green', 4: 'Blue', 5: 'Alpha'}

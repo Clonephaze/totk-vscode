@@ -43,7 +43,6 @@ def from_editor_text(editor_text: str, big_endian: bool, version: int) -> bytes:
     cached_tag_list = json_data.get("TagList", [])
     path_list_map = json_data.get("PathList", {})
     
-    # Sort by the pipe-delimited value first (the first hash), then full key
     path_vec = list(path_list_map.items())
     def sort_key(item):
         key = item[0]

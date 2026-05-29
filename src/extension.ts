@@ -59,7 +59,7 @@ import {
     setCanonicalIndexExtensionPath,
 } from './canonicalPathIndex';
 import { propagateCanonicalSave } from './canonicalSavePropagation';
-import { isWithinRoot, normalizePath, pathsEqual, resolveProjectRomfsMount } from './projectPaths';
+import { normalizePath, pathsEqual } from './projectPaths';
 import type { DiskWriteNotification } from './totkDiskFs';
 import { configureFilteringRules } from './filteringRules';
 import {
@@ -162,7 +162,7 @@ class SarcProvider implements vscode.FileSystemProvider {
         return python;
     }
 
-    watch(uri: vscode.Uri): vscode.Disposable {
+    watch(_uri: vscode.Uri): vscode.Disposable {
         return new vscode.Disposable(() => { });
     }
 
@@ -452,7 +452,7 @@ class SarcProvider implements vscode.FileSystemProvider {
         this.notifyChanged(uri, vscode.FileChangeType.Created);
     }
 
-    async writeFile(uri: vscode.Uri, content: Uint8Array, options: { create: boolean; overwrite: boolean }): Promise<void> {
+    async writeFile(uri: vscode.Uri, content: Uint8Array, _options: { create: boolean; overwrite: boolean }): Promise<void> {
         const fsPath = uri.fsPath;
 
         if (this.isMutatableDiskPath(fsPath)) {
@@ -651,8 +651,6 @@ export async function activate(context: vscode.ExtensionContext) {
     const output = vscode.window.createOutputChannel('TOTK Editor');
     context.subscriptions.push(output);
 
-    // Register essential setup commands before any heavy initialization so
-    // users can always recover if activation fails later.
     context.subscriptions.push(
         vscode.commands.registerCommand('totk-editor.setupPython', async () => {
             const python = await ensurePythonEnvironment(context, true);

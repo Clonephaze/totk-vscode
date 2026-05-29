@@ -66,7 +66,6 @@ def _pick_compressor(ctx, logical_path: str):
 
 
 def _decompress_with_fallback(ctx, data: bytes, logical_path: str) -> bytes:
-    """Try the expected dictionary, then fall back to other TOTK dictionaries."""
     lower = _logical_path_lower(logical_path)
     primary = _pick_decompressor(ctx, logical_path)
     candidates = [primary]
@@ -91,7 +90,6 @@ def decompress_container(
     logical_path: str = '',
     romfs_path: str = '',
 ) -> tuple[bytes, bool, bool]:
-    """Decompress .zs (ZSTD) or Yaz0 wrappers. Returns (payload, was_zstd, was_yaz0)."""
     if file_data.startswith(_ZSTD_MAGIC):
         zsdic = zsdic_pack_path(romfs_path) if romfs_path else ''
         if zsdic and os.path.isfile(zsdic):

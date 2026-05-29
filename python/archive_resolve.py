@@ -199,17 +199,6 @@ def _mutate_nested_rename(
 
 
 def resolve_sarc_view(disk_archive_path: str, locator_path: str, romfs_path: str):
-    """
-    Open the on-disk archive and walk nested archive *files* along locator_path.
-
-    Returns (sarc, path_prefix, is_disk_compressed, consumed_archive_prefix) where:
-    - path_prefix is the path of ``locator_path`` inside the innermost open SARC
-      (after nested archives)
-    - consumed_archive_prefix is the virtual path from the disk archive root to
-      the current innermost open archive (e.g. "A.sarc" or "dir/A.sarc/B.sarc")
-
-    BNTX segments are treated as opaque files (not opened as SARC).
-    """
     locator_path = _normalize_path(locator_path)
     sarc, is_compressed = load_sarc_file(disk_archive_path, romfs_path)
 
@@ -237,7 +226,6 @@ def resolve_sarc_view(disk_archive_path: str, locator_path: str, romfs_path: str
 
 
 def _load_disk_bytes(disk_archive_path: str, romfs_path: str) -> tuple[bytes, bool]:
-    """Read a disk file and decompress if ZSTD-compressed. Returns (data, was_compressed)."""
     raw = Path(disk_archive_path).read_bytes()
     is_compressed = raw.startswith(_ZSTD_MAGIC)
     if is_compressed:
@@ -246,9 +234,6 @@ def _load_disk_bytes(disk_archive_path: str, romfs_path: str) -> tuple[bytes, bo
 
 
 def _resolve_bntx_data(disk_archive_path: str, locator_path: str, romfs_path: str):
-    """If the path targets a BNTX container, return (bntx_bytes, remainder_path, bntx_prefix).
-
-    Returns None if no BNTX boundary is found in the path."""
     if _is_bntx_name(disk_archive_path):
         data, _ = _load_disk_bytes(disk_archive_path, romfs_path)
         if is_bntx(data):

@@ -77,7 +77,6 @@ function isLikelyRealPythonExe(exePath: string): boolean {
         if (!stat.isFile()) {
             return false;
         }
-        // Windows Store "python3.exe" stubs are tiny reparse points, not real interpreters.
         if (process.platform === 'win32' && stat.size < 10_000) {
             return false;
         }
@@ -87,7 +86,6 @@ function isLikelyRealPythonExe(exePath: string): boolean {
     }
 }
 
-// Run `where` / `which` in a shell so we see the same PATH as CMD, not VS Code's trimmed PATH.
 function resolveNamesViaShell(names: string[]): string[] {
     const found: string[] = [];
     const seen = new Set<string>();
@@ -120,7 +118,7 @@ function resolveNamesViaShell(names: string[]): string[] {
                 found.push(trimmed);
             }
         } catch {
-            /* not on PATH in shell either */
+            // Pass
         }
     }
 

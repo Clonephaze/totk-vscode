@@ -1,4 +1,4 @@
-"""Read/write Nintendo AAMP (binary parameter archive) via oead."""
+"""Read/write Nintendo AAMP via oead."""
 
 import json
 import os

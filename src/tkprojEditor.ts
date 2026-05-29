@@ -31,7 +31,7 @@ export class TkprojEditorProvider implements vscode.CustomTextEditorProvider {
         );
     }
 
-    constructor(private readonly context: vscode.ExtensionContext) {}
+    constructor(_context: vscode.ExtensionContext) {}
 
     public async resolveCustomTextEditor(
         document: vscode.TextDocument,

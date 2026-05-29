@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from zstd_totk import compress_container, decompress_container, zsdic_pack_path
+from zstd_totk import decompress_container, zsdic_pack_path
 
 _ZSTD_MAGIC = b'\x28\xb5\x2f\xfd'
 _SCRIPT_DIR = Path(__file__).resolve().parent
@@ -34,8 +34,8 @@ def _platform_tool_names() -> list[str]:
     if os.name == 'nt':
         return ['xlink_tool.exe']
     if sys.platform == 'darwin':
-        return ['xlink_tool_osx', 'xlink_tool']
-    return ['xlink_tool_linux', 'xlink_tool']
+        return ['xlink_tool_osx', 'xlink_tool'] # Use macOS build of xlink2
+    return ['xlink_tool_linux', 'xlink_tool'] # Assume linux if Windows and macOS not detected
 
 
 def find_xlink_tool() -> str:

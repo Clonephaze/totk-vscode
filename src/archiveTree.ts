@@ -213,20 +213,40 @@ export function registerArchiveTree(context: vscode.ExtensionContext): ArchiveTr
             provider.addRoot(folder.uri);
             void focusArchiveSidebar();
     };
+
+    const addProjectFolders = async (): Promise<void> => {
+        const uris = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: true,
+            title: 'Select Projects to Add',
+            openLabel: 'Add Projects'
+        });
+        if (uris && uris.length > 0) {
+            for (const uri of uris) {
+                provider.addRoot(uri);
+            }
+            void focusArchiveSidebar();
+        }
+    };
+
     context.subscriptions.push(
         vscode.commands.registerCommand('totk-editor.addWorkspaceToArchives', addWorkspaceToArchives),
         // Backwards-compat alias for an older mistyped command id.
         vscode.commands.registerCommand('totk-edit.addWorkspaceToArchives', addWorkspaceToArchives),
+        vscode.commands.registerCommand('totk-editor.addProjectFolders', addProjectFolders),
     );
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
             'totk-editor.removeArchiveRoot',
-            (item: ArchiveTreeItem | undefined) => {
-                if (!item?.resourceUri) {
-                    return;
+            (item: ArchiveTreeItem | undefined, selectedItems?: ArchiveTreeItem[]) => {
+                const itemsToRemove = selectedItems && selectedItems.length > 0 ? selectedItems : (item ? [item] : []);
+                for (const i of itemsToRemove) {
+                    if (i.resourceUri) {
+                        provider.removeRoot(i.resourceUri);
+                    }
                 }
-                provider.removeRoot(item.resourceUri);
             },
         ),
     );
