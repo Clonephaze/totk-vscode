@@ -36,7 +36,8 @@ def _fmt_scalar(value) -> str:
         return f"!f64 {float(value)}"
     if isinstance(value, oead.F32):
         number = float(value)
-        return str(int(number)) if number.is_integer() else str(number)
+        s = str(number)
+        return s if ("." in s or "e" in s or "nan" in s.lower() or "inf" in s.lower()) else s + ".0"
     if isinstance(value, int):
         return str(value)
     if isinstance(value, oead.Bytes):
