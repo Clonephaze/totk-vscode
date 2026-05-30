@@ -212,7 +212,9 @@ def read_txtg_texture_result(txtg_data: bytes, texture_name: str) -> dict:
             except Exception:
                 pass
         try:
-            linear_pitch = _deswizzle_pitch_linear(render_width, render_height, blk_w, blk_h, bpp, image_data)
+            linear_pitch = _deswizzle_pitch_linear(
+                render_width, render_height, blk_w, blk_h, bpp, image_data
+            )
             decode_inputs.append(("pitch-linear", linear_pitch, block_height_log2))
         except Exception:
             pass
@@ -221,7 +223,9 @@ def read_txtg_texture_result(txtg_data: bytes, texture_name: str) -> dict:
         best_candidate: tuple[float, bytes, int, str] | None = None
         for label, payload, bh_used in decode_inputs:
             try:
-                pixels, raw_mode = _decode_pixels(payload, render_width, render_height, decoder_key, blk_w, blk_h)
+                pixels, raw_mode = _decode_pixels(
+                    payload, render_width, render_height, decoder_key, blk_w, blk_h
+                )
                 if pixels is None:
                     decode_error = f"Decode failed via {label} path ({decoder_key})."
                     continue
@@ -257,7 +261,9 @@ def read_txtg_texture_result(txtg_data: bytes, texture_name: str) -> dict:
             block_height_log2 = best_bh
             from PIL import Image
 
-            image = Image.frombytes("RGBA", (render_width, render_height), best_pixels, "raw", best_raw_mode)
+            image = Image.frombytes(
+                "RGBA", (render_width, render_height), best_pixels, "raw", best_raw_mode
+            )
             if is_astc_8x8:
                 image = image.resize((width, height), Image.NEAREST)
             import os
@@ -331,6 +337,8 @@ def read_txtg_texture_result(txtg_data: bytes, texture_name: str) -> dict:
     elif decode_error:
         result["error"] = decode_error
     return result
+
+
 """Editor for TOTK TXTG (TexToGo) textures."""
 
 import struct
@@ -440,7 +448,7 @@ class TxtgEditor:
         Replaces the compressed surfaces.
         raw_surfaces should be a list of uncompressed image payloads (e.g. mips/arrays).
         """
-        header = self._data[:self.header_size]
+        header = self._data[: self.header_size]
 
         cctx = zstd.ZstdCompressor()
 
@@ -454,7 +462,7 @@ class TxtgEditor:
             size_table.append(len(compressed))
             payload_data.extend(compressed)
 
-        index_bytes = bytearray(surface_count * 4) # usually zeroed out or offsets
+        index_bytes = bytearray(surface_count * 4)  # usually zeroed out or offsets
         # TXTG format index table isn't strictly required to have offsets, often zeroes,
         # but let's just make it zeroes for now.
 
@@ -471,4 +479,3 @@ class TxtgEditor:
 
     def to_bytes(self) -> bytes:
         return bytes(self._data)
-

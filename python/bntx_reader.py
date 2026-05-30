@@ -49,7 +49,7 @@ def _read_bntx_string(data: bytes, offset: int, le: bool) -> str:
         return ""
 
     # If the pointer is literally pointing at the NX block header, it's an empty Nintendo string
-    if data[offset:offset+3] == b"NX ":
+    if data[offset : offset + 3] == b"NX ":
         return ""
 
     # Try reading as a length-prefixed string (Switch Toolbox style)
@@ -65,6 +65,7 @@ def _read_bntx_string(data: bytes, offset: int, le: bool) -> str:
     if end < 0:
         end = min(offset + 256, len(data))
     return data[offset:end].decode("utf-8", errors="replace")
+
 
 class BntxTexture:
     """Parsed texture metadata matching Switch Toolbox's property set."""
@@ -305,10 +306,10 @@ def read_texture_data(data: bytes, texture_name: str) -> bytes:
                 raise ValueError(f"Texture {texture_name!r} has no extractable data")
             return data[tex.data_offset : tex.data_offset + tex.data_size]
     raise FileNotFoundError(f"Texture not found in BNTX: {texture_name!r}")
-"""BNTX (Binary NX TeXture) container editor."""
 
+
+"""BNTX (Binary NX TeXture) container editor."""
 
 
 def bit_length(n: int) -> int:
     return n.bit_length()
-
