@@ -539,8 +539,8 @@ export function registerGameDumpTree(
         const status = provider.getSearchStatus();
         
         let msgParts = [];
-        if (query) msgParts.push(query);
-        if (archiveQuery) msgParts.push(`Archives: ${archiveQuery}`);
+        if (query) {msgParts.push(query);}
+        if (archiveQuery) {msgParts.push(`Archives: ${archiveQuery}`);}
         
         if (msgParts.length > 0) {
             treeView.message = status ? `Search: ${msgParts.join(', ')} - ${status}` : `Search: ${msgParts.join(', ')}`;
